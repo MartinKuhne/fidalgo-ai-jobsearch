@@ -1,0 +1,58 @@
+@startuml Fidalgo_Container
+
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam rectangle {
+    BackgroundColor White
+    BorderColor #333333
+    ArrowColor #333333
+}
+
+title C4 Container Diagram - Fidalgo JobSearch AI
+
+System_Boundary(fidalgo, "Fidalgo Container") {
+
+    Container(web_ui, "Web UI", "Razor Pages", "Allows users to browse jobs, filter by date and rating, and mark jobs as applied or discarded. REQ-WEB-001..006")
+
+    Container(background_service, "Background Service", "C# .NET 10 Hosted Service", "Runs the periodic job-scraping scheduler (every 4h) and the daily 05:00 email dispatch. REQ-001, REQ-004, REQ-012")
+
+    Container(scrape_agent, "Job Scrape Agent", "C# + Playwright", "Launches headless browsers to scrape job boards for 'software engineer' and 'software engineering manager'. Extracts listing URLs and reads detail pages. REQ-004")
+
+    Container(skill_agent, "Skill Extract Agent", "C# + OpenAI Client", "Sends job descriptions to the local LLM for extraction of top 10 technical and top 10 interpersonal skills. REQ-008, REQ-009")
+
+    Container(match_engine, "Match Engine", "C#", "Computes skill overlap between user resume/narrative and employer job skills. Produces a suitability percentage. REQ-010")
+
+    Container(email_service, "Email Service", "C# + MailKit", "Generates ranked job reports, triggers resume customization, and sends emails via SMTP. REQ-012, REQ-013")
+
+    Container(resume_customizer, "Resume Customizer", "C# + QuestPDF", "Generates a job-tailored PDF resume by injecting relevant keywords and highlighting matched skills. REQ-013")
+
+    ContainerDb(sqlite_db, "SQLite Database", "EF Core", "Persistent store for users, job postings, and extracted skills. REQ-007")
+
+    ContainerDb(user_files, "User File Store", "Filesystem", "Stores user resume files and optional career narrative files. REQ-006")
+}
+
+System_Ext(job_boards, "Job Boards\n(governmentjobs, Google,\nglassdoor, monster,\nindeed, linkedin)", "External job listing sources")
+System_Ext(local_llm, "Local LLM\n192.168.1.21:8080", "OpenAI-compatible inference server")
+System_Ext(smtp, "SMTP Server", "Outbound email relay")
+
+Rel(web_ui, sqlite_db, "reads / updates\njobs, filters\nREQ-WEB-001..006")
+Rel(background_service, scrape_agent, "triggers every 4h")
+Rel(background_service, email_service, "triggers daily 05:00")
+
+Rel(scrape_agent, job_boards, "headless browser\nscraping REQ-004")
+Rel(scrape_agent, skill_agent, "sends job descriptions")
+
+Rel(skill_agent, local_llm, "POST /v1/chat/completions\nREQ-100")
+
+Rel(skill_agent, match_engine, "returns extracted skills")
+Rel(match_engine, user_files, "reads resume\nand narrative REQ-006")
+Rel(match_engine, sqlite_db, "stores job record\nwith rating REQ-011")
+
+Rel(email_service, match_engine, "queries top jobs\nby suitability")
+Rel(email_service, resume_customizer, "requests tailored PDF\nper job REQ-013")
+Rel(email_service, smtp, "sends email\nREQ-012")
+Rel(email_service, web_ui, "on-demand trigger\nvia API")
+
+Rel(user_files, web_ui, "serves resume\nuploads REQ-006")
+
+@enduml

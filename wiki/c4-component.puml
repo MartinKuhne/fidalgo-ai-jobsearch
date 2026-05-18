@@ -1,0 +1,94 @@
+@startuml Fidalgo_Component
+
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam rectangle {
+    BackgroundColor White
+    BorderColor #333333
+    ArrowColor #333333
+}
+
+title C4 Component Diagram - Fidalgo JobSearch AI
+
+' === Background Service Components ===
+
+package "Background Service" #LightBlue {
+
+    component [Scheduler] as scheduler
+    component [JobScrapeOrchestrator] as orchestrator
+    component [JobBoardScraper] as scraper
+    component [SkillExtractAgent] as skill_agent
+    component [MatchEngine] as match_engine
+    component [EmailService] as email_service
+    component [EmailReportBuilder] as report_builder
+    component [ResumeCustomizer] as resume_customizer
+    component [PdfGenerator] as pdf_generator
+
+    scheduler --> orchestrator : triggers every 4h
+    scheduler --> email_service : triggers daily 05:00
+
+    orchestrator --> scraper : for each board
+    orchestrator --> skill_agent : sends job descriptions
+
+    scraper --> scraper : reads detail pages
+    scraper --> orchestrator : returns URLs + content
+
+    skill_agent --> match_engine : returns tech + interp skills
+
+    match_engine --> match_engine : computes overlap %
+    match_engine --> orchestrator : returns suitability rating
+
+    email_service --> report_builder : builds ranked list
+    report_builder --> resume_customizer : per job
+    resume_customizer --> pdf_generator : generates tailored PDF
+    pdf_generator --> email_service : returns PDF bytes
+}
+
+' === Web UI Components ===
+
+package "Web UI (Razor Pages)" #LightGreen {
+
+    component [JobListPage] as job_list
+    component [JobDetailPage] as job_detail
+    component [JobFilterService] as filter_service
+    component [JobActionService] as action_service
+    component [UserPreferencePage] as pref_page
+
+    job_list --> filter_service : applies date + rating filters
+    job_detail --> action_service : marks applied / discarded
+    pref_page --> action_service : updates preferences
+}
+
+' === Data Layer ===
+
+package "Data Layer" #LightGray {
+
+    component [DbContext] as db_context
+    component [JobRepository] as job_repo
+    component [UserRepository] as user_repo
+    component [SQLite] as sqlite
+
+    job_repo --> db_context : EF Core queries
+    user_repo --> db_context : EF Core queries
+    db_context --> sqlite : persists data
+}
+
+' === External ===
+
+System_Ext(job_boards, "Job Boards", "External sources")
+System_Ext(local_llm, "Local LLM\n192.168.1.21:8080", "OpenAI-compatible API")
+System_Ext(smtp, "SMTP Server", "Email relay")
+
+' === Connections ===
+
+Rel(scraper, job_boards, "Playwright\nheadless scraping")
+Rel(skill_agent, local_llm, "POST /v1/\nchat/completions")
+Rel(email_service, smtp, "SMTP\nTLS encrypted")
+
+Rel(orchestrator, job_repo, "upserts jobs")
+Rel(match_engine, job_repo, "reads user profile")
+Rel(job_list, job_repo, "queries jobs")
+Rel(job_detail, job_repo, "updates job")
+Rel(action_service, user_repo, "reads/writes\npreferences")
+
+@enduml

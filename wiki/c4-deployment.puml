@@ -1,0 +1,79 @@
+@startuml Fidalgo_Deployment
+
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam rectangle {
+    BackgroundColor White
+    BorderColor #333333
+    ArrowColor #333333
+}
+
+title C4 Deployment Diagram - Fidalgo JobSearch AI
+
+Deployment_Node(container, "Docker Container\n(Host: user's machine)") {
+
+    Deployment_Node(process, "Single .NET 10 Process") {
+
+        node web_node {
+            component [Razor Pages Web Server\n(port 5000)] as web_server
+        }
+
+        node bg_node {
+            component [Hosted Background Service] as hosted_service
+        }
+
+        component [Playwright Chromium\n(headless)] as playwright
+        component [EF Core SQLite] as ef_core
+        component [OpenAI HTTP Client] as openai_client
+        component [MailKit SMTP Client] as mailkit
+        component [QuestPDF] as questpdf
+    }
+
+    node storage {
+        file "sqlite.db" as sqlite_file
+        folder "data/" as user_data
+    }
+}
+
+Deployment_Node(local_server, "Local LLM Server\n(192.168.1.21:8080)") {
+    node llm_container {
+        component [OpenAI-Compatible API\n(e.g., Ollama / vLLM)] as llm_api
+    }
+}
+
+Deployment_Node(email_relay, "SMTP Server") {
+    component [SMTP Relay] as smtp_relay
+}
+
+Deployment_Node(ext_boards, "Job Boards") {
+    node gj { [governmentjobs.com] }
+    node gg { [Google Search] }
+    node gd { [glassdoor.com] }
+    node mn { [monster.com] }
+    node id { [indeed.com] }
+    node li { [linkedin.com] }
+}
+
+' === Internal connections ===
+Rel(web_server, ef_core, "HTTP REST")
+Rel(hosted_service, playwright, "launches browser")
+Rel(hosted_service, openai_client, "POST JSON")
+Rel(hosted_service, mailkit, "send email")
+Rel(hosted_service, questpdf, "generate PDF")
+Rel(ef_core, sqlite_file, "file I/O")
+
+' === External connections ===
+Rel(playwright, gj, "HTTP GET +\nJS rendering")
+Rel(playwright, gg, "HTTP GET +\nJS rendering")
+Rel(playwright, gd, "HTTP GET +\nJS rendering")
+Rel(playwright, mn, "HTTP GET +\nJS rendering")
+Rel(playwright, id, "HTTP GET +\nJS rendering")
+Rel(playwright, li, "HTTP GET +\nJS rendering")
+
+Rel(openai_client, llm_api, "HTTP POST\n/v1/chat/completions")
+Rel(mailkit, smtp_relay, "SMTP / TLS")
+
+Rel(user_data, web_server, "resume uploads")
+Rel(user_data, hosted_service, "reads resume + narrative")
+
+@enduml
