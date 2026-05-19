@@ -65,7 +65,7 @@ public class JobSearchAgent
         var toolGetJobs = ChatTool.CreateFunctionTool(
             functionName: "get_jobs",
             functionDescription: "Query saved jobs by filters",
-            functionParameters: BinaryData.FromString("""{"type":"object","properties":{"keywords":{"type":"string","description":"Keywords to search"},"employer":{"type":"string","description":"Employer name"},"dateFrom":{"type":"string","description":"Date from"},"dateTo":{"type":"string","description":"Date to"},"sourceWebsite":{"type":"string","description":"Source website"}},"required":["keywords"]}"""));
+            functionParameters: BinaryData.FromString("""{"type":"object","properties":{"keywords":{"type":"string","description":"Keywords to search"},"employer":{"type":"string","description":"Employer name"},"dateFrom":{"type":"string","description":"Date from"},"dateTo":{"type":"string","description":"Date to"},"sourceWebsite":{"type":"string","description":"Source website"}},"required":[]}}"""));
 
         var options = new ChatCompletionOptions
         {

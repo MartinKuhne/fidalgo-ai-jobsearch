@@ -93,5 +93,5 @@ These instructions must be followed always if you’re contributing, reviewing, 
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-specs/002-job-scraper-agent/plan.md
+specs/004-system-logging-tracing/plan.md
 <!-- SPECKIT END -->
