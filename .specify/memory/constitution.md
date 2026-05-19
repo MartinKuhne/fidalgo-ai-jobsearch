@@ -1,50 +1,70 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# Fidalgo Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Open Source
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+All project source code, documentation, and configuration SHALL be publicly available under permissive open source licenses. Third-party dependencies MUST have open source licenses compatible with project distribution. No proprietary or closed-source components allowed.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### II. Testing (NON-NEGOTIABLE)
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+Every feature MUST have corresponding tests before implementation. TDD mandatory: Tests written → User approved → Tests fail → Then implement. Red-Green-Refactor cycle strictly enforced. Minimum 80% code coverage required for new code. Integration tests required for all external interfaces and contracts.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### III. Observability
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+All services MUST emit structured logs with correlation IDs for request tracing. Metrics MUST be exported in Prometheus format. Tracing MUST use OpenTelemetry standard. Health endpoints MUST expose dependency status. Log levels: ERROR for failures, WARN for degraded states, INFO for key events, DEBUG for development only.
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### IV. Infrastructure as Code
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+All infrastructure configuration MUST be version-controlled as code. Environment-specific values MUST use configuration files or environment variables, never hardcoded. Deployment automation MUST use declarative tools (e.g., Terraform, Ansible). Infrastructure changes MUST go through code review before apply.
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+### V. Self Explaining Code
+
+Code MUST be self-documenting through clear naming, explicit intent, and minimal comments required. Complex business logic MUST include XML documentation on public APIs. README files REQUIRED at each package/module level explaining purpose and usage. Code reviews MUST verify clarity before approval.
+
+### VI. Immutability
+
+Configuration and data structures MUST be immutable where feasible. Records and value objects over mutable classes. State changes MUST produce new instances rather than modify existing. Dependency injection for testability, not runtime mutation. Mutable state limited to service-level caching with explicit invalidation.
+
+## Additional Constraints
+
+### Technology Stack
+
+- .NET LTS framework required (REQ-003 from SPEC.md)
+- Microsoft Agent Framework required (REQ-002 from SPEC.md)
+- SQLite for local storage (REQ-007 from SPEC.md)
+- Local OpenAI-compatible LLM at configurable endpoint (REQ-100 from SPEC.md)
+
+### Security Requirements
+
+- No secrets stored in code; use environment variables or secure vaults
+- Encryption in transit for all external communications
+- Input validation on all public interfaces
+- Least privilege principle for service accounts
+
+## Development Workflow
+
+### Quality Gates
+
+- All PRs require code review from at least one maintainer
+- Tests MUST pass before merge (unit + integration)
+- Linting and formatting checks MUST pass
+- Breaking changes require migration plan documented
+
+### Release Process
+
+- Semantic versioning (MAJOR.MINOR.PATCH)
+- Changelog maintained for all releases
+- Release candidates tagged before production deploy
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+Constitution supersedes all other practices. Amendments require:
+1. Proposal documented in architecture-decision-records.md
+2. Rationale clearly stated with alternatives considered
+3. Migration plan if breaking changes required
+4. Version bump: MAJOR for principle removal, MINOR for additions, PATCH for clarifications
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+All PRs/reviews must verify compliance with this constitution. Complexity must be justified with simpler alternative rejected because.
+
+**Version**: 1.0.0 | **Ratified**: 2026-05-18 | **Last Amended**: 2026-05-18
