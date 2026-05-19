@@ -23,7 +23,7 @@ public class HtmlSanitizer
         RemoveRenderingElements(document);
         RemoveInlineStyles(document);
         
-        return document.Body.TextContent;
+        return document.Body?.TextContent ?? string.Empty;
     }
 
     private void RemoveRenderingElements(AngleSharp.Html.Dom.IHtmlDocument document)

@@ -69,7 +69,7 @@ if (listDiscarded)
     return RunListDiscardedMode(host, email);
 }
 
-return RunSearchMode(host, email, keywords, resumePath, !string.IsNullOrEmpty(narrativePath) ? narrativePath : null);
+  return RunSearchMode(host, email, keywords, resumePath ?? string.Empty, !string.IsNullOrEmpty(narrativePath) ? narrativePath : null);
 
 static int RunQueryJobsMode(IHost host, string email, string? employer, string? dateFrom, string? dateTo, string? sourceWebsite)
 {
