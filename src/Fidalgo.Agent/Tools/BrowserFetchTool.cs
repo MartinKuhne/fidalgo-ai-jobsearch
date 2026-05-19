@@ -88,17 +88,6 @@ public class BrowserFetchTool : IBrowserFetchTool
                 WaitDurationMilliseconds: hasWaited ? waitDurationMs : null,
                 Error: $"Request to {request.Url} timed out after {timeout}ms");
         }
-        catch (Exception ex) when (ex.Message.Contains("Browser", StringComparison.OrdinalIgnoreCase))
-        {
-            return new FetchResult(
-                Url: request.Url,
-                Content: string.Empty,
-                ContentLoadedAt: DateTime.UtcNow,
-                TotalDurationMilliseconds: (int)(DateTime.UtcNow - startTime).TotalMilliseconds,
-                HasWaited: hasWaited,
-                WaitDurationMilliseconds: hasWaited ? waitDurationMs : null,
-                Error: $"Browser error during navigation to {request.Url}");
-        }
         catch (HttpRequestException ex) when (ex.StatusCode != null)
         {
             return new FetchResult(
