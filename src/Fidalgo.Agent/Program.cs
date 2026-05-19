@@ -19,8 +19,9 @@ using Fidalgo.Agent.Retry;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
-builder.Configuration.AddJsonFile("appsettings.Development.json", optional: true, reloadOnChange: true);
+string baseDir = AppContext.BaseDirectory;
+builder.Configuration.AddJsonFile(Path.Combine(baseDir, "appsettings.json"), optional: false, reloadOnChange: true);
+builder.Configuration.AddJsonFile(Path.Combine(baseDir, "appsettings.Development.json"), optional: true, reloadOnChange: true);
 
 builder.Services.AddAgentServices(builder.Configuration.GetSection("DatabasePath")?.Get<string>() ?? "jobs.db");
 builder.Services.AddLlmConfiguration(builder.Configuration);
