@@ -1,4 +1,5 @@
 using Fidalgo.Agent.Models;
+using Microsoft.Playwright;
 
 namespace Fidalgo.Agent.Tools;
 
@@ -20,9 +21,9 @@ public class BrowserFetchTool : IBrowserFetchTool
             var browser = await playwright.Firefox.LaunchAsync(new BrowserTypeLaunchOptions
             {
                 Headless = request.BrowserConfiguration?.Headless ?? true,
-            }, cancellationToken);
+            });
 
-            using var context = await browser.NewContextAsync(new BrowserNewContextOptions
+            await using var context = await browser.NewContextAsync(new BrowserNewContextOptions
             {
                 ViewportSize = new ViewportSize
                 {
@@ -30,32 +31,34 @@ public class BrowserFetchTool : IBrowserFetchTool
                     Height = request.BrowserConfiguration?.ViewportHeight ?? 1080,
                 },
                 UserAgent = request.BrowserConfiguration?.UserAgent,
-            }, cancellationToken);
+            });
 
-            using var page = await context.NewPageAsync(cancellationToken);
+            var page = await context.NewPageAsync();
 
-            var timeout = request.TimeoutMilliseconds ?? request.BrowserConfiguration?.TimeoutMilliseconds ?? 30000;
-
-            if (!string.IsNullOrEmpty(request.WaitForSelector))
+            try
             {
-                var waitStartTime = DateTime.UtcNow;
-                hasWaited = true;
+                var timeout = request.TimeoutMilliseconds ?? request.BrowserConfiguration?.TimeoutMilliseconds ?? 30000;
 
-                await page.WaitForSelectorAsync(request.WaitForSelector, new FrameWaitForSelectorOptions
+                if (!string.IsNullOrEmpty(request.WaitForSelector))
                 {
+                    var waitStartTime = DateTime.UtcNow;
+                    hasWaited = true;
+
+                    await page.WaitForSelectorAsync(request.WaitForSelector, new PageWaitForSelectorOptions
+                    {
+                        Timeout = timeout,
+                    });
+
+                    waitDurationMs = (int)(DateTime.UtcNow - waitStartTime).TotalMilliseconds;
+                }
+
+                await page.GotoAsync(request.Url, new PageGotoOptions
+                {
+                    WaitUntil = WaitUntilState.NetworkIdle,
                     Timeout = timeout,
-                }, cancellationToken);
+                });
 
-                waitDurationMs = (int)(DateTime.UtcNow - waitStartTime).TotalMilliseconds;
-            }
-
-            await page.GotoAsync(request.Url, new PageGotoOptions
-            {
-                WaitUntil = WaitUntilState.NetworkIdle,
-                Timeout = timeout,
-            }, cancellationToken);
-
-            var content = await page.ContentAsync(cancellationToken);
+                var content = await page.ContentAsync();
 
             var totalDuration = (int)(DateTime.UtcNow - startTime).TotalMilliseconds;
 
@@ -67,6 +70,11 @@ public class BrowserFetchTool : IBrowserFetchTool
                 HasWaited: hasWaited,
                 WaitDurationMilliseconds: hasWaited ? waitDurationMs : null,
                 Error: null);
+            }
+            finally
+            {
+                await page.CloseAsync();
+            }
         }
         catch (TimeoutException ex)
         {
