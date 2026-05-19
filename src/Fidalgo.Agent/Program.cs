@@ -52,11 +52,11 @@ if (string.IsNullOrEmpty(email))
     return 1;
 }
 
-if (string.IsNullOrEmpty(keywords))
-{
-    Console.WriteLine("Error: --keywords is required");
-    return 1;
-}
+   if (string.IsNullOrEmpty(keywords))
+    {
+        Console.WriteLine("Error: --keywords is required");
+        return 1;
+    }
 
 if (string.IsNullOrEmpty(resumePath) && !queryJobs && string.IsNullOrEmpty(discardJobIdArg) && !listDiscarded)
 {

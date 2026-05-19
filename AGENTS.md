@@ -41,6 +41,7 @@ These instructions must be followed always if you’re contributing, reviewing, 
 - Modern C#: nullable enabled; warnings as errors; primary constructors where helpful
 - Async‑first; propagate CancellationToken; Async suffix for async methods
 - Use newest available LTS framework
+- Use options and options validation as learned from https://learn.microsoft.com/en-us/dotnet/core/extensions/configuration
 
 ## node.js
 
