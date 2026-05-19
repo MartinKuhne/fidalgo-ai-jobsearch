@@ -61,10 +61,10 @@
 - [X] T027 Create ITracingConfiguration interface in src/Fidalgo.Agent/Tracing/Configuration/ITracingConfiguration.cs
 - [X] T028 Implement configuration classes in src/Fidalgo.Agent/Logging/Configuration/LoggingConfiguration.cs
 - [X] T029 Implement configuration classes in src/Fidalgo.Agent/Tracing/Configuration/TracingConfiguration.cs
-- [ ] T030 Configure Serilog in Program.cs with file sink for daily rotation
-- [ ] T031 Configure OpenTelemetry in Program.cs with OTLP exporter
-- [ ] T032 Configure exception handling middleware in Program.cs
-- [ ] T033 Configure retry policies in Program.cs
+- [X] T030 Configure Serilog in Program.cs with file sink for daily rotation
+- [X] T031 Configure OpenTelemetry in Program.cs with OTLP exporter
+- [X] T032 Configure exception handling middleware in Program.cs
+- [X] T033 Configure retry policies in Program.cs
 - [X] T034 Register all services in DI container in Program.cs
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
