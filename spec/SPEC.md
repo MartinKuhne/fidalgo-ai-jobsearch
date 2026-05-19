@@ -37,6 +37,7 @@
 - [REQ-102] When the system invokes the AI agent, it shall substitute the {{email}} string with the user's email
 - [REQ-103] When the system invokes the AI agent, it shall substitute the {{query}} string with the job search query
 - [REQ-104] The AI agent shall use GetStreamingResponseAsync and print progress messages to the log file
+- [REQ-105] The AI agent shall use 'u-mkuhne' as the Api Key as no api key is needed for the local LLM
 
 ## Job search engines
 

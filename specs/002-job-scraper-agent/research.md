@@ -15,7 +15,7 @@
 
 **Configuration example**:
 ```csharp
-var client = new OpenAIClient(new Uri("http://192.168.1.21:8080/v1"), new ApiKeyCredential("local"));
+var client = new OpenAIClient(new Uri("http://192.168.1.21:8080/v1"), new ApiKeyCredential("u-mkuhne"));
 var chatClient = client.GetChatClient("local-model").AsIChatClient();
 ```
 

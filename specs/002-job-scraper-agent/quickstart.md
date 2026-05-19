@@ -18,7 +18,7 @@ Set the LLM endpoint in `src/Fidalgo.Agent/appsettings.json`:
   "LLM": {
     "Endpoint": "http://192.168.1.21:8080/v1",
     "Model": "local-model",
-    "ApiKey": "local"
+    "ApiKey": "u-mkuhne"
   },
   "DatabasePath": "jobs.db"
 }
