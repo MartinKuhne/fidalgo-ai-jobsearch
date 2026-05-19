@@ -1,9 +1,9 @@
 ## Functional requirements (EARS format)
 
-- [REQ-001] The system shall produce a long running containerized image as well as a commandline program
-- [REQ-002] The system shall employ the [Micrsoft Agent Framework](https://learn.microsoft.com/en-us/agent-framework/overview/?pivots=programming-language-csharp)
-- [REQ-003] The system shall employ the latest LTS versio of the .net framework
-- [REQ-004] The system shall periodically (every four hours) scrape the following web sites with a job search for 'software engineer' and 'software engineering manager'
+- [REQ-001] The system shall produce a commandline program
+- [REQ-002] The system shall employ the [Microsoft Agent Framework](https://learn.microsoft.com/en-us/agent-framework/overview/?pivots=programming-language-csharp)
+- [REQ-003] The system shall employ the latest LTS versiom of the .net framework
+- [REQ-004] The system shall support the following following job web sites
   - governmentjobs.com
   - google (the search engine, not jobs at google)
   - glassdoor.com
@@ -11,40 +11,33 @@
   - indeed.com
   - linkedin.com
 - [REQ-005] The system shall support multiple users, keyed by their e-mail address
-- [REQ-006] The system shall support the following per-user options in a json file
+- [REQ-006] The system shall support the following per-user options as command line arguments
   - E-mail address
   - A list of job search keywords
   - A resume file
   - An optional career narrative file
-- [REQ-007] The system shall maintain a sqlite database containing jobs found
-- [REQ-008] For each job found, the system shall identify the top 10 technical skills sought by the employer
-- [REQ-009] For each job found, the system shall identify the top 10 interpersonal skills sought by the employer
-- [REQ-010] For each job found, the system shall identify overlap between the applicant's technical and interpersonal skills as expressed by their resume and narrative, and the skills sought by the employer
-- [REQ-011] For each job found, the system shall store
+- [REQ-007] The system shall maintain a sqlite database to manage jobs that have been found and analyzed
+
+- [REQ-008] The system shall provide a [fetch] tool for the agent to fetch a web site or retrieve a web search
+- [REQ-009] The system shall provide a [save_job] tool for the agent to store a job
+- [REQ-010] The system shall provide a [get_jobs] tool for the agent to search stored jobs by date, employer, job ID and web site the job was found at 
+- [REQ-011] The [save_job] tool shall store
+  - The user's email address
   - The employer name
   - The posted date
-  - A unique identifier
+  - A unique identifier (automatically generated, not an input argument)
   - The job ID (if available)
   - The salary range (low and high number)
-  - The job description as posted
-  - The list of technical skills desired as identified as the previous step
-  - The list of interpersonal skills desired as identified as the previous step
+  - The job description as posted (text)
+  - The list of technical skills desired (text)
+  - The list of interpersonal skills desired (text)
+  - Resume hints (text)
   - A suitability rating as a percentage
   - An optional date for the user to record they have applied for the job
   - A boolean, defaulting to false, that allows the user to discard a job when they do not plan to apply
-- [REQ-012] When requested and every day at 5am, the system shall send an e-mail to each applicant containing a list of potential jobs, ordered by match percentage, highest to lowest
-- [REQ-013] When sending out the job report email, each job shall contain a clickable link that allows the user to download a customized copy of their resume appropriate for the job offering
+- [REQ-012] When requested the system shall send an e-mail to each user containing a list of potential jobs, ordered by match percentage, highest to lowest
 
 - [REQ-100] The system shall use a local OpenAI comatible LLM at http://192.168.1.21:8080/v1
-- [REQ-101] The system shall select a suitable technology to search the web and retrieve web pages
-- [REQ-101] The system shall select a suitable technology to create PDF pages to generate resumes
-
-- [WEB-001] The system shall expose a simple web site allowing the user to browse the database of jobs found
-- [WEB-002] The web site shall provide filtering by date
-- [WEB-003] The web site shall provide filtering by suitability rating
-- [WEB-004] The web site shall allow the user to mark a job as applied to with a date selector, defaulting to the current date
-- [WEB-005] The web site shall allow the user to mark a job as discarded
-- [WEB-006] The web site shall now show jobs which have been discarded
 
 
 ## Agent instructions
