@@ -94,5 +94,5 @@ These instructions must be followed always if you’re contributing, reviewing, 
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-specs/004-system-logging-tracing/plan.md
+specs/005-browser-fetch/plan.md
 <!-- SPECKIT END -->
