@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Fidalgo.Agent")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+9aadb147b252b2e9168023a4bbb9efda1ff14e86")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+c59345c038f648369fcfff168b60eb8930dbbee2")]
 [assembly: System.Reflection.AssemblyProductAttribute("Fidalgo.Agent")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Fidalgo.Agent")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

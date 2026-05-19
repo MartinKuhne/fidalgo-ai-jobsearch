@@ -56,10 +56,6 @@
               "target": "Package",
               "version": "[1.44.1, )"
             },
-            "Microsoft.Agents.AI": {
-              "target": "Package",
-              "version": "[1.6.1, )"
-            },
             "Microsoft.Data.Sqlite": {
               "target": "Package",
               "version": "[10.0.8, )"
@@ -88,13 +84,29 @@
               "target": "Package",
               "version": "[10.0.0, )"
             },
+            "OpenAI": {
+              "target": "Package",
+              "version": "[2.10.0, )"
+            },
+            "OpenTelemetry": {
+              "target": "Package",
+              "version": "[1.15.3, )"
+            },
+            "OpenTelemetry.Exporter.OpenTelemetryProtocol": {
+              "target": "Package",
+              "version": "[1.15.3, )"
+            },
             "Polly": {
               "target": "Package",
-              "version": "[8.5.0, )"
+              "version": "[8.6.6, )"
+            },
+            "Serilog.AspNetCore": {
+              "target": "Package",
+              "version": "[10.0.0, )"
             },
             "System.ClientModel": {
               "target": "Package",
-              "version": "[1.5.0, )"
+              "version": "[1.12.0, )"
             }
           },
           "imports": [
