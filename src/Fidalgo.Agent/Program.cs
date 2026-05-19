@@ -1,10 +1,7 @@
-using Azure.AI.OpenAI;
-using Azure.Core;
+using OpenAI;
+using OpenAI.Chat;
 using System.ClientModel;
-using Microsoft.Agents.AI;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
@@ -131,8 +128,7 @@ static int RunSearchMode(IHost host, string email, string keywords, string resum
     var httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
     httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("FidalgoAgent/1.0");
     
-    var chatClient = (IChatClient)new AzureOpenAIClient(new Uri(llmConfig.Endpoint), new ApiKeyCredential(llmConfig.ApiKey))
-        .GetChatClient(llmConfig.Model);
+    var chatClient = new ChatClient(llmConfig.Model, new ApiKeyCredential(llmConfig.ApiKey), new OpenAIClientOptions { Endpoint = new Uri(llmConfig.Endpoint) });
 
     var fetchTool = new FetchTool(httpClient, new Fidalgo.Agent.Sanitization.HtmlSanitizer());
     var saveJobTool = new SaveJobTool(ServiceProviderServiceExtensions.GetRequiredService<JobRepository>(host.Services));
