@@ -32,10 +32,11 @@
   - is_deleted: A boolean, defaulting to false, that allows the user to discard a job when they do not plan to apply
   - date_notified A date (nullable) to indicate when a notification was sent to the user for the job posting
 
-- [REQ-100] The system shall use a local OpenAI comatible LLM at http://192.168.1.21:8080/v1
+- [REQ-100] The system shall use a local OpenAI comatible LLM at http://192.168.1.21:8080/v1 with OpenAIClient
 - [REQ-101] When the system is invoked, it shall periodically invoke the AI agent with the tools configured and the prompt listed in the [Agent instructions] section of this document
 - [REQ-102] When the system invokes the AI agent, it shall substitute the {{email}} string with the user's email
 - [REQ-103] When the system invokes the AI agent, it shall substitute the {{query}} string with the job search query
+- [REQ-104] The AI agent shall use GetStreamingResponseAsync and print progress messages to the log file
 
 ## Job search engines
 

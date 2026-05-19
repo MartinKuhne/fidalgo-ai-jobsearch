@@ -1,85 +1,97 @@
-using Fidalgo.Agent.Configuration;
-using Fidalgo.Agent.DependencyInjection;
-using Fidalgo.Agent.Scraping;
-using Fidalgo.Agent.Storage;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
+using Azure.AI.OpenAI;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
+using OpenAI.Chat;
+using Fidalgo.Agent.Prompts;
+using Fidalgo.Agent.Tools;
 
 namespace Fidalgo.Agent.Agents;
 
-/// <summary>
-/// Background service that runs job searches on a schedule.
-/// </summary>
-public class JobSearchAgent : BackgroundService
+public class JobSearchAgent
 {
-    private readonly IServiceProvider _serviceProvider;
-    private readonly ILogger<JobSearchAgent> _logger;
-    private readonly TimeSpan _searchInterval;
+    private readonly IChatClient _chatClient;
+    private readonly FetchTool _fetchTool;
+    private readonly SaveJobTool _saveJobTool;
+    private readonly GetJobsTool _getJobsTool;
+    private readonly string _email;
+    private readonly string _resume;
+    private readonly string? _narrative;
 
-    /// <summary>
-    /// Creates a new instance of the JobSearchAgent.
-    /// </summary>
-    /// <param name="serviceProvider">The service provider.</param>
-    /// <param name="logger">The logger.</param>
-    /// <param name="searchInterval">Interval between search cycles. Defaults to 4 hours.</param>
-    public JobSearchAgent(IServiceProvider serviceProvider, ILogger<JobSearchAgent> logger, TimeSpan? searchInterval = null)
+    public JobSearchAgent(
+        IChatClient chatClient,
+        FetchTool fetchTool,
+        SaveJobTool saveJobTool,
+        GetJobsTool getJobsTool,
+        string email,
+        string resume,
+        string? narrative = null)
     {
-        _serviceProvider = serviceProvider;
-        _logger = logger;
-        _searchInterval = searchInterval ?? TimeSpan.FromHours(4);
+        _chatClient = chatClient;
+        _fetchTool = fetchTool;
+        _saveJobTool = saveJobTool;
+        _getJobsTool = getJobsTool;
+        _email = email;
+        _resume = resume;
+        _narrative = narrative;
     }
 
-    /// <summary>
-    /// Executes the background service loop.
-    /// </summary>
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    public async Task<int> RunAsync(
+        string keywords,
+        int maxPages = 100,
+        CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("JobSearchAgent started. Search interval: {Interval}", _searchInterval);
+        var query = BuildSearchQuery(keywords);
+        var prompt = AgentPrompt.Generate(_email, query, _narrative);
 
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            try
-            {
-                await RunSearchCycleAsync(stoppingToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error during search cycle");
-            }
+        var fetchFunc = AIFunctionFactory.Create(_fetchTool.FetchAsync, "fetch", "Fetch a web page and return sanitized content");
+        var saveJobFunc = AIFunctionFactory.Create(SaveJobWrapper, "save_job", "Save a job with analysis results");
+        var getJobsFunc = AIFunctionFactory.Create(_getJobsTool.GetAsync, "get_jobs", "Query saved jobs by filters");
 
-            await Task.Delay(_searchInterval, stoppingToken);
-        }
+        var agent = _chatClient.AsAIAgent(
+            instructions: prompt,
+            name: "JobSearchAgent",
+            tools: [fetchFunc, saveJobFunc, getJobsFunc]);
 
-        _logger.LogInformation("JobSearchAgent stopped");
+        var session = await agent.CreateSessionAsync();
+        var response = await agent.RunAsync(session);
+        
+        return response.Messages.Count;
     }
 
-    private async Task RunSearchCycleAsync(CancellationToken cancellationToken)
+    private string BuildSearchQuery(string keywords)
     {
-        using var scope = _serviceProvider.CreateScope();
-        var configRepo = scope.ServiceProvider.GetRequiredService<ConfigRepository>();
-        var orchestrator = scope.ServiceProvider.GetRequiredService<SearchOrchestrator>();
-        var logger = scope.ServiceProvider.GetRequiredService<ILogger<JobSearchAgent>>();
+        return $"Search for jobs matching: {keywords}";
+    }
 
-        var activeConfigs = await configRepo.GetActiveConfigAsync("");
-
-        if (activeConfigs == null)
-        {
-            logger.LogWarning("No active configuration found. Run with --config to set up search sources.");
-            return;
-        }
-
-        logger.LogInformation("Starting search cycle for user {Email}", activeConfigs.UserEmail);
-
-        try
-        {
-            var result = await orchestrator.ExecuteSearchAsync(activeConfigs.Id, cancellationToken);
-            logger.LogInformation(
-                "Search cycle complete: {JobsFound} jobs found, {JobsSkipped} duplicates skipped in {Duration:F1}s",
-                result.JobsFound, result.JobsSkipped, result.DurationSeconds ?? 0);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Search cycle failed");
-        }
+    private async Task<Guid> SaveJobWrapper(
+        string employer,
+        string? employerJobId,
+        DateTime? postedDate,
+        decimal? salaryRangeLow,
+        decimal? salaryRangeHigh,
+        string description,
+        string pros,
+        string cons,
+        string resumeHints,
+        int score,
+        string recommendation,
+        string sourceWebsite,
+        CancellationToken cancellationToken = default)
+    {
+        return await _saveJobTool.SaveAsync(
+            _email,
+            employer,
+            employerJobId,
+            postedDate,
+            salaryRangeLow,
+            salaryRangeHigh,
+            description,
+            pros,
+            cons,
+            resumeHints,
+            score,
+            recommendation,
+            sourceWebsite,
+            cancellationToken);
     }
 }

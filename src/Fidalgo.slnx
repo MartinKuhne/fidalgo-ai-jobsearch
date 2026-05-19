@@ -1,2 +1,4 @@
 <Solution>
+  <Project Path="Fidalgo.Agent.Tests/Fidalgo.Agent.Tests.csproj" />
+  <Project Path="Fidalgo.Agent/Fidalgo.Agent.csproj" />
 </Solution>
