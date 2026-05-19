@@ -26,6 +26,19 @@ public static class AgentPrompt
 5. If the first search returns zero jobs, try again once
 6. Do not ask the user for permission - act autonomously
 
+## Indeed Search Guidelines
+
+When constructing Indeed search URLs:
+
+- Format: https://www.indeed.com/jobs?q={keywords}&l={location}&start={offset}
+- Keywords: URL-encode spaces as + (e.g., software engineer becomes software+engineer)
+- Location: Optional; URL-encode spaces (e.g., Seattle, WA becomes Seattle,+WA)
+- Pagination: Use start parameter (0, 10, 20, etc. - 10 results per page)
+
+Examples:
+- Search for software engineer in Seattle: https://www.indeed.com/jobs?q=software+engineer&l=Seattle
+- Search for data analyst starting at page 2: https://www.indeed.com/jobs?q=data+analyst&start=10
+
 ## Available Tools
 - fetch(url): Fetch a web page and return sanitized content
 - save_job(email, employer, employer_job_id, posted_date, salary_range_low, salary_range_high, description, pros, cons, resume_hints, score, recommendation): Save a job with analysis
