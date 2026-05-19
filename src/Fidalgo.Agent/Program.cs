@@ -10,11 +10,27 @@ using Fidalgo.Agent.DependencyInjection;
 using Fidalgo.Agent.Tools;
 using Fidalgo.Agent.Agents;
 using Fidalgo.Agent.Storage;
+using Fidalgo.Agent.Logging;
+using Fidalgo.Agent.Logging.Configuration;
+using Fidalgo.Agent.Tracing;
+using Fidalgo.Agent.Tracing.Configuration;
+using Fidalgo.Agent.ErrorHandling;
+using Fidalgo.Agent.Retry;
 
 var builder = Host.CreateApplicationBuilder(args);
 
 builder.Services.AddAgentServices(builder.Configuration.GetSection("DatabasePath")?.Get<string>() ?? "jobs.db");
 builder.Services.AddLlmConfiguration(builder.Configuration);
+
+builder.Services.AddSingleton<ILoggingConfiguration, LoggingConfiguration>();
+builder.Services.AddSingleton<ITracingConfiguration, TracingConfiguration>();
+builder.Services.AddSingleton<ITraceContextProvider, TraceContextProvider>();
+builder.Services.AddSingleton<ILogEntryWriter, LogEntryWriter>();
+builder.Services.AddSingleton<ISpanFactory, SpanFactory>();
+builder.Services.AddSingleton<IExceptionMapper, ExceptionMapper>();
+builder.Services.AddSingleton<IRetryPolicy, RetryPolicy>();
+builder.Services.AddSingleton<ITraceContextPropagator, TraceContextPropagator>();
+builder.Services.AddSingleton<IOtlpExporter, OtlpExporter>();
 
 var host = builder.Build();
 
