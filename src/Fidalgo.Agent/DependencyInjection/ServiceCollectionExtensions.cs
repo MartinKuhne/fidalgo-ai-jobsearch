@@ -1,11 +1,14 @@
 using Fidalgo.Agent.Configuration;
 using Fidalgo.Agent.DependencyInjection;
 using Fidalgo.Agent.Logging;
+using Fidalgo.Agent.Models;
 using Fidalgo.Agent.Prompts;
 using Fidalgo.Agent.Sanitization;
 using Fidalgo.Agent.Storage;
+using Fidalgo.Agent.Tools;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Fidalgo.Agent.DependencyInjection;
 
@@ -25,9 +28,21 @@ public static class ServiceCollectionExtensions
         // Services
         services.AddScoped<HtmlSanitizer>();
 
+        // Browser Fetch Tool
+        services.AddOptions<BrowserFetchOptions>()
+            .BindConfiguration("BrowserFetch")
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+        services.AddScoped<IBrowserFetchTool, BrowserFetchTool>();
+
         // Configuration
         services.AddSingleton<CliOptions>();
 
         return services;
     }
+}
+
+public class BrowserFetchOptions
+{
+    public BrowserConfiguration Configuration { get; set; } = new();
 }

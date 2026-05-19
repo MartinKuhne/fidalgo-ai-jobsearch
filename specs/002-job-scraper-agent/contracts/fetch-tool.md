@@ -14,6 +14,23 @@ fetch(url: string) -> string
 |-----------|------|----------|-------------|
 | url | string | Required | The URL to fetch (e.g., Indeed.com search URL or individual job page) |
 
+## Indeed Search URL Construction
+
+When searching for jobs on Indeed.com, construct URLs using the following format:
+
+```
+https://www.indeed.com/jobs?q={keywords}&l={location}&start={offset}
+```
+
+**Query Parameters:**
+- `q` - Job keywords (URL-encoded, spaces replaced with `+`)
+- `l` - Location (optional, URL-encoded)
+- `start` - Pagination offset (0, 10, 20, etc. - Indeed uses 10 results per page)
+
+**Examples:**
+- Search for "software engineer" in Seattle: `https://www.indeed.com/jobs?q=software+engineer&l=Seattle`
+- Search for "data+analyst" with pagination: `https://www.indeed.com/jobs?q=data+analyst&start=10`
+
 ## Returns
 
 | Field | Type | Description |
@@ -29,6 +46,14 @@ fetch(url: string) -> string
 - Returns the cleaned content in markdown format
 - Handles HTTP errors gracefully (returns Success=false with error message)
 - Respects basic rate limiting (e.g., 1 request per 2 seconds)
+
+## Usage Pattern for Job Search
+
+1. Construct search URL with keywords using the Indeed search format
+2. Fetch the search results page
+3. Extract job listing URLs from the HTML
+4. Fetch individual job pages for detailed analysis
+5. Iterate through pagination by incrementing `start` parameter
 
 ## Sanitization Rules
 
