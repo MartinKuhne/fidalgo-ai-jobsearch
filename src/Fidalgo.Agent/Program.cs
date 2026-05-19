@@ -150,7 +150,7 @@ static int RunSearchMode(IHost host, string email, string keywords, string resum
     
     var chatClient = new ChatClient(llmConfig.Model, new ApiKeyCredential(llmConfig.ApiKey), new OpenAIClientOptions { Endpoint = new Uri(llmConfig.Endpoint) });
 
-    var fetchTool = new FetchTool(httpClient, new Fidalgo.Agent.Sanitization.HtmlSanitizer());
+    var fetchTool = ServiceProviderServiceExtensions.GetRequiredService<IBrowserFetchTool>(host.Services);
     var saveJobTool = new SaveJobTool(ServiceProviderServiceExtensions.GetRequiredService<JobRepository>(host.Services));
     var getJobsTool = new GetJobsTool(ServiceProviderServiceExtensions.GetRequiredService<JobRepository>(host.Services));
 

@@ -1,14 +1,15 @@
 using OpenAI.Chat;
-using Fidalgo.Agent.Prompts;
-using Fidalgo.Agent.Tools;
-using System.Text.Json;
+    using Fidalgo.Agent.Prompts;
+    using Fidalgo.Agent.Tools;
+    using Fidalgo.Agent.Models;
+    using System.Text.Json;
 
 namespace Fidalgo.Agent.Agents;
 
 public class JobSearchAgent
 {
     private readonly ChatClient _chatClient;
-    private readonly FetchTool _fetchTool;
+    private readonly IBrowserFetchTool _browserFetchTool;
     private readonly SaveJobTool _saveJobTool;
     private readonly GetJobsTool _getJobsTool;
     private readonly string _email;
@@ -17,7 +18,7 @@ public class JobSearchAgent
 
     public JobSearchAgent(
         ChatClient chatClient,
-        FetchTool fetchTool,
+        IBrowserFetchTool browserFetchTool,
         SaveJobTool saveJobTool,
         GetJobsTool getJobsTool,
         string email,
@@ -25,7 +26,7 @@ public class JobSearchAgent
         string? narrative = null)
     {
         _chatClient = chatClient;
-        _fetchTool = fetchTool;
+        _browserFetchTool = browserFetchTool;
         _saveJobTool = saveJobTool;
         _getJobsTool = getJobsTool;
         _email = email;
@@ -114,7 +115,9 @@ public class JobSearchAgent
         {
             using JsonDocument arguments = JsonDocument.Parse(toolCall.FunctionArguments);
             string url = arguments.RootElement.GetProperty("url").GetString() ?? string.Empty;
-            return await _fetchTool.FetchAsync(url, cancellationToken);
+            var request = new FetchRequest(Url: url);
+            var result = await _browserFetchTool.FetchAsync(request, cancellationToken);
+            return result.Error ?? result.Content;
         }
         else if (toolCall.FunctionName == "save_job")
         {

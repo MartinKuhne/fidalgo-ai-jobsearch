@@ -40,9 +40,9 @@ Examples:
 - Search for data analyst starting at page 2: https://www.indeed.com/jobs?q=data+analyst&start=10
 
 ## Available Tools
-- fetch(url): Fetch a web page and return sanitized content
-- save_job(email, employer, employer_job_id, posted_date, salary_range_low, salary_range_high, description, pros, cons, resume_hints, score, recommendation): Save a job with analysis
-- get_jobs(email, date_from, date_to, employer, employer_job_id, source_website): Query saved jobs
+    - fetch(url): Fetch a web page using a real browser (Firefox) and return HTML content. Uses Playwright for full page rendering and JavaScript execution.
+    - save_job(email, employer, employer_job_id, posted_date, salary_range_low, salary_range_high, description, pros, cons, resume_hints, score, recommendation): Save a job with analysis
+    - get_jobs(email, date_from, date_to, employer, employer_job_id, source_website): Query saved jobs
 
 ## Output Format
 After each job analysis, use save_job tool immediately. Do not output markdown or formatted text - use tools only.";
