@@ -1,16 +1,14 @@
 using Fidalgo.Agent.Models;
-using Serilog;
-using Serilog.Core;
-using Serilog.Events;
+using Microsoft.Extensions.Logging;
 
 namespace Fidalgo.Agent.Logging;
 
 public class LogEntryWriter : ILogEntryWriter
 {
-    private readonly ILogger _logger;
+    private readonly ILogger<LogEntryWriter> _logger;
     private readonly ITraceContextProvider _traceContextProvider;
 
-    public LogEntryWriter(ILogger logger, ITraceContextProvider traceContextProvider)
+    public LogEntryWriter(ILogger<LogEntryWriter> logger, ITraceContextProvider traceContextProvider)
     {
         _logger = logger;
         _traceContextProvider = traceContextProvider;
@@ -30,30 +28,9 @@ public class LogEntryWriter : ILogEntryWriter
                 true);
         }
 
-        var properties = new Dictionary<string, object?>
-        {
-            ["TraceId"] = context.TraceId,
-            ["SpanId"] = context.SpanId,
-            ["CorrelationId"] = context.CorrelationId,
-            ["Timestamp"] = logEntry.Timestamp,
-            ["Level"] = logEntry.Level.ToString()
-        };
+        var logLevel = ToMicrosoftLogLevel(logEntry.Level);
+        _logger.Log(logLevel, logEntry.Message);
 
-        if (logEntry.Properties != null)
-        {
-            foreach (var prop in logEntry.Properties)
-            {
-                properties[prop.Key] = prop.Value;
-            }
-        }
-
-        if (logEntry.Exception != null)
-        {
-            properties["Exception"] = SerializeExceptionDetails(logEntry.Exception);
-        }
-
-        var logEventLevel = ToSerilogLevel(logEntry.Level);
-        _logger.Write(logEventLevel, logEntry.Message, properties.Values.ToArray());
         await Task.CompletedTask;
     }
 
@@ -119,22 +96,17 @@ public class LogEntryWriter : ILogEntryWriter
         await WriteAsync(logEntry, cancellationToken);
     }
 
-    private static LogEventLevel ToSerilogLevel(Fidalgo.Agent.Models.LogLevel level)
+    private static Microsoft.Extensions.Logging.LogLevel ToMicrosoftLogLevel(Fidalgo.Agent.Models.LogLevel level)
     {
         return level switch
         {
-            Fidalgo.Agent.Models.LogLevel.Trace => LogEventLevel.Verbose,
-            Fidalgo.Agent.Models.LogLevel.Debug => LogEventLevel.Debug,
-            Fidalgo.Agent.Models.LogLevel.Information => LogEventLevel.Information,
-            Fidalgo.Agent.Models.LogLevel.Warning => LogEventLevel.Warning,
-            Fidalgo.Agent.Models.LogLevel.Error => LogEventLevel.Error,
-            Fidalgo.Agent.Models.LogLevel.Critical => LogEventLevel.Fatal,
-            _ => LogEventLevel.Information
+            Fidalgo.Agent.Models.LogLevel.Trace => Microsoft.Extensions.Logging.LogLevel.Trace,
+            Fidalgo.Agent.Models.LogLevel.Debug => Microsoft.Extensions.Logging.LogLevel.Debug,
+            Fidalgo.Agent.Models.LogLevel.Information => Microsoft.Extensions.Logging.LogLevel.Information,
+            Fidalgo.Agent.Models.LogLevel.Warning => Microsoft.Extensions.Logging.LogLevel.Warning,
+            Fidalgo.Agent.Models.LogLevel.Error => Microsoft.Extensions.Logging.LogLevel.Error,
+            Fidalgo.Agent.Models.LogLevel.Critical => Microsoft.Extensions.Logging.LogLevel.Critical,
+            _ => Microsoft.Extensions.Logging.LogLevel.Information
         };
-    }
-
-    private static string SerializeExceptionDetails(ExceptionDetails details)
-    {
-        return System.Text.Json.JsonSerializer.Serialize(details, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
     }
 }
