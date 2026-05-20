@@ -1,14 +1,17 @@
 using Fidalgo.Agent.Storage;
+using Microsoft.Extensions.Logging;
 
 namespace Fidalgo.Agent.Tools;
 
 public class SaveJobTool
 {
     private readonly JobRepository _repository;
+    private readonly ILogger<SaveJobTool>? _logger;
 
-    public SaveJobTool(JobRepository repository)
+    public SaveJobTool(JobRepository repository, ILogger<SaveJobTool>? logger = null)
     {
         _repository = repository;
+        _logger = logger;
     }
 
     public async Task<Guid> SaveAsync(
@@ -27,6 +30,8 @@ public class SaveJobTool
         string sourceWebsite,
         CancellationToken cancellationToken = default)
     {
+        _logger?.LogInformation("Saving job for {Email}: {Employer} (Score: {Score}, Recommendation: {Recommendation})", 
+            email, employer, score, recommendation);
         if (score < 0 || score > 100)
         {
             throw new ArgumentException("Score must be between 0 and 100", nameof(score));
@@ -56,6 +61,10 @@ public class SaveJobTool
             SourceWebsite = sourceWebsite
         };
 
-        return await _repository.SaveAsync(job, cancellationToken);
+        var jobId = await _repository.SaveAsync(job, cancellationToken);
+        
+        _logger?.LogInformation("Job saved successfully with ID: {JobId}", jobId);
+
+        return jobId;
     }
 }

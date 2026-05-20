@@ -1,14 +1,17 @@
 using Fidalgo.Agent.Storage;
+using Microsoft.Extensions.Logging;
 
 namespace Fidalgo.Agent.Tools;
 
 public class GetJobsTool
 {
     private readonly JobRepository _repository;
+    private readonly ILogger<GetJobsTool>? _logger;
 
-    public GetJobsTool(JobRepository repository)
+    public GetJobsTool(JobRepository repository, ILogger<GetJobsTool>? logger = null)
     {
         _repository = repository;
+        _logger = logger;
     }
 
     public async Task<List<JobEntity>> GetAsync(
@@ -20,7 +23,10 @@ public class GetJobsTool
         string? sourceWebsite = null,
         CancellationToken cancellationToken = default)
     {
-        return await _repository.QueryAsync(
+        _logger?.LogInformation("Querying jobs for {Email} with filters: dateFrom={DateFrom}, dateTo={DateTo}, employer={Employer}, sourceWebsite={SourceWebsite}", 
+            email, dateFrom, dateTo, employer, sourceWebsite);
+
+        var jobs = await _repository.QueryAsync(
             email: email,
             dateFrom: dateFrom,
             dateTo: dateTo,
@@ -29,5 +35,9 @@ public class GetJobsTool
             sourceWebsite: sourceWebsite,
             excludeDeleted: true,
             cancellationToken: cancellationToken);
+
+        _logger?.LogInformation("Found {Count} jobs for {Email}", jobs.Count, email);
+
+        return jobs;
     }
 }

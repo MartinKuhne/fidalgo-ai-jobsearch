@@ -3,6 +3,7 @@ using OpenAI.Chat;
     using Fidalgo.Agent.Tools;
     using Fidalgo.Agent.Models;
     using System.Text.Json;
+    using Microsoft.Extensions.Logging;
 
 namespace Fidalgo.Agent.Agents;
 
@@ -15,6 +16,7 @@ public class JobSearchAgent
     private readonly string _email;
     private readonly string _resume;
     private readonly string? _narrative;
+    private readonly ILogger<JobSearchAgent> _logger;
 
     public JobSearchAgent(
         ChatClient chatClient,
@@ -23,7 +25,8 @@ public class JobSearchAgent
         GetJobsTool getJobsTool,
         string email,
         string resume,
-        string? narrative = null)
+        string? narrative = null,
+        ILogger<JobSearchAgent> logger = null!)
     {
         _chatClient = chatClient;
         _browserFetchTool = browserFetchTool;
@@ -32,6 +35,7 @@ public class JobSearchAgent
         _email = email;
         _resume = resume;
         _narrative = narrative;
+        _logger = logger;
     }
 
     public async Task<int> RunAsync(
@@ -79,6 +83,7 @@ public class JobSearchAgent
         do
         {
             requiresAction = false;
+            _logger.LogInformation("Calling LLM (Message #{MessageCount})", messageCount + 1);
             ChatCompletion completion = await _chatClient.CompleteChatAsync(messages, options, cancellationToken);
 
             messageCount++;
@@ -86,15 +91,20 @@ public class JobSearchAgent
             switch (completion.FinishReason)
             {
                 case ChatFinishReason.Stop:
+                    _logger.LogInformation("LLM completed successfully");
                     messages.Add(new AssistantChatMessage(completion));
                     break;
 
                 case ChatFinishReason.ToolCalls:
+                    _logger.LogInformation("LLM requested {ToolCallCount} tool calls", completion.ToolCalls.Count);
                     messages.Add(new AssistantChatMessage(completion));
 
                     foreach (ChatToolCall toolCall in completion.ToolCalls)
                     {
+                        _logger.LogInformation("Executing tool call: {ToolName} with arguments: {Arguments}", 
+                            toolCall.FunctionName, toolCall.FunctionArguments);
                         string toolResult = await ResolveToolCallAsync(toolCall, cancellationToken);
+                        _logger.LogInformation("Tool call {ToolName} returned result", toolCall.FunctionName);
                         messages.Add(new ToolChatMessage(toolCall.Id, toolResult));
                     }
 
@@ -115,23 +125,32 @@ public class JobSearchAgent
         {
             using JsonDocument arguments = JsonDocument.Parse(toolCall.FunctionArguments);
             string url = arguments.RootElement.GetProperty("url").GetString() ?? string.Empty;
+            _logger.LogInformation("Tool fetch: URL={Url}", url);
             var request = new FetchRequest(Url: url);
             var result = await _browserFetchTool.FetchAsync(request, cancellationToken);
+            if (!string.IsNullOrEmpty(result.Error))
+            {
+                _logger.LogError("Tool fetch failed: {Error}", result.Error);
+            }
             return result.Error ?? result.Content;
         }
         else if (toolCall.FunctionName == "save_job")
         {
             using JsonDocument arguments = JsonDocument.Parse(toolCall.FunctionArguments);
+            _logger.LogInformation("Tool save_job: parsing arguments");
             Guid jobId = await SaveJobFromArgumentsAsync(arguments, cancellationToken);
+            _logger.LogInformation("Tool save_job: saved job with ID {JobId}", jobId);
             return $"Job saved with ID: {jobId}";
         }
         else if (toolCall.FunctionName == "get_jobs")
         {
             using JsonDocument arguments = JsonDocument.Parse(toolCall.FunctionArguments);
+            _logger.LogInformation("Tool get_jobs: querying jobs");
             var jobs = await _getJobsTool.GetAsync(_email, null, null, 
                 GetOptionalString(arguments, "employer"),
                 null, 
                 GetOptionalString(arguments, "sourceWebsite"));
+            _logger.LogInformation("Tool get_jobs: found {Count} jobs", jobs.Count);
             return $"Found {jobs.Count} jobs";
         }
         else

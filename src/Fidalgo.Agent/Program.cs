@@ -5,6 +5,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using Serilog;
+using Serilog.Extensions.Hosting;
 using Fidalgo.Agent.Configuration;
 using Fidalgo.Agent.DependencyInjection;
 using Fidalgo.Agent.Tools;
@@ -17,11 +19,17 @@ using Fidalgo.Agent.Tracing.Configuration;
 using Fidalgo.Agent.ErrorHandling;
 using Fidalgo.Agent.Retry;
 
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .CreateLogger();
+
 var builder = Host.CreateApplicationBuilder(args);
 
 string baseDir = AppContext.BaseDirectory;
 builder.Configuration.AddJsonFile(Path.Combine(baseDir, "appsettings.json"), optional: false, reloadOnChange: true);
 builder.Configuration.AddJsonFile(Path.Combine(baseDir, "appsettings.Development.json"), optional: true, reloadOnChange: true);
+
+builder.Services.AddSerilog(Log.Logger);
 
 builder.Services.AddAgentServices(builder.Configuration.GetSection("DatabasePath")?.Get<string>() ?? "jobs.db");
 builder.Services.AddLlmConfiguration(builder.Configuration);
