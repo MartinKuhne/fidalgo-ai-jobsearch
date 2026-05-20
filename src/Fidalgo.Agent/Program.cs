@@ -29,9 +29,10 @@ var builder = Host.CreateApplicationBuilder(args);
 string baseDir = AppContext.BaseDirectory;
 builder.Configuration.AddJsonFile(Path.Combine(baseDir, "appsettings.json"), optional: false, reloadOnChange: true);
 builder.Configuration.AddJsonFile(Path.Combine(baseDir, "appsettings.Development.json"), optional: true, reloadOnChange: true);
+builder.Configuration.AddCommandLine(args);
 
 builder.Services.AddSerilog(Log.Logger);
-
+builder.Services.AddCliOptions(builder.Configuration);
 builder.Services.AddAgentServices(builder.Configuration.GetSection("DatabasePath")?.Get<string>() ?? "jobs.db");
 builder.Services.AddLlmConfiguration(builder.Configuration);
 
@@ -47,76 +48,46 @@ builder.Services.AddSingleton<IOtlpExporter, OtlpExporter>();
 
 var host = builder.Build();
 
-var email = args.FirstOrDefault(a => a.StartsWith("--email="))?.Split('=')[1];
-var keywords = args.FirstOrDefault(a => a.StartsWith("--keywords="))?.Split('=')[1];
-var resumePath = args.FirstOrDefault(a => a.StartsWith("--resume="))?.Split('=')[1];
-var location = args.FirstOrDefault(a => a.StartsWith("--location="))?.Split('=')[1] ?? "United States";
-var zipCode = args.FirstOrDefault(a => a.StartsWith("--zip="))?.Split('=')[1];
-var queryJobs = args.Any(a => a == "--query-jobs");
-var employerFilter = args.FirstOrDefault(a => a.StartsWith("--employer="))?.Split('=')[1];
-var dateFromArg = args.FirstOrDefault(a => a.StartsWith("--date-from="))?.Split('=')[1];
-var dateToArg = args.FirstOrDefault(a => a.StartsWith("--date-to="))?.Split('=')[1];
-var sourceWebsiteFilter = args.FirstOrDefault(a => a.StartsWith("--source-website="))?.Split('=')[1];
-var discardJobIdArg = args.FirstOrDefault(a => a.StartsWith("--discard-job="))?.Split('=')[1];
-var listDiscarded = args.Any(a => a == "--list-discarded");
+var cliOptions = host.Services.GetRequiredService<IOptions<CliOptions>>().Value;
 
-if (string.IsNullOrEmpty(email))
-{
-    Console.WriteLine("Error: --email is required");
-    return 1;
-}
-
-   if (string.IsNullOrEmpty(keywords))
-    {
-        Console.WriteLine("Error: --keywords is required");
-        return 1;
-    }
-
-if (string.IsNullOrEmpty(resumePath) && !queryJobs && string.IsNullOrEmpty(discardJobIdArg) && !listDiscarded)
+if (string.IsNullOrEmpty(cliOptions.ResumePath) && !cliOptions.QueryJobs && cliOptions.DiscardJobId is null && !cliOptions.ListDiscarded)
 {
     Console.WriteLine("Error: --resume is required");
     return 1;
 }
 
-if (!File.Exists(resumePath) && !queryJobs && string.IsNullOrEmpty(discardJobIdArg) && !listDiscarded)
+if (!string.IsNullOrEmpty(cliOptions.ResumePath) && !cliOptions.QueryJobs && cliOptions.DiscardJobId is null && !cliOptions.ListDiscarded)
 {
-    Console.WriteLine($"Error: Resume file not found: {resumePath}");
-    return 1;
+    if (!File.Exists(cliOptions.ResumePath))
+    {
+        Console.WriteLine($"Error: Resume file not found: {cliOptions.ResumePath}");
+        return 1;
+    }
 }
 
-if (string.IsNullOrEmpty(zipCode))
+if (cliOptions.QueryJobs)
 {
-    Console.WriteLine("Error: --zip is required");
-    return 1;
+    return RunQueryJobsMode(host, cliOptions);
 }
 
-if (queryJobs)
+if (cliOptions.DiscardJobId is not null)
 {
-    return RunQueryJobsMode(host, email, employerFilter, dateFromArg, dateToArg, sourceWebsiteFilter);
+    return RunDiscardJobMode(host, cliOptions.DiscardJobId.Value);
 }
 
-if (!string.IsNullOrEmpty(discardJobIdArg) && Guid.TryParse(discardJobIdArg, out var discardId))
+if (cliOptions.ListDiscarded)
 {
-    return RunDiscardJobMode(host, email, discardId);
+    return RunListDiscardedMode(host, cliOptions.Email);
 }
 
-if (listDiscarded)
-{
-    return RunListDiscardedMode(host, email);
-}
+return RunSearchMode(host, cliOptions);
 
-return RunSearchMode(host, email, keywords, resumePath, location, zipCode);
-
-static int RunQueryJobsMode(IHost host, string email, string? employer, string? dateFrom, string? dateTo, string? sourceWebsite)
+static int RunQueryJobsMode(IHost host, CliOptions options)
 {
     var repository = ServiceProviderServiceExtensions.GetRequiredService<JobRepository>(host.Services);
     var tool = ServiceProviderServiceExtensions.GetRequiredService<GetJobsTool>(host.Services);
     
-    DateTime? from = null, to = null;
-    if (!string.IsNullOrEmpty(dateFrom) && DateTime.TryParse(dateFrom, out var df)) from = df;
-    if (!string.IsNullOrEmpty(dateTo) && DateTime.TryParse(dateTo, out var dt)) to = dt;
-
-    var jobs = tool.GetAsync(email, from, to, employer, null, sourceWebsite).Result;
+    var jobs = tool.GetAsync(options.Email, options.DateFrom, options.DateTo, options.EmployerFilter, null, options.SourceWebsiteFilter).Result;
     
     Console.WriteLine($"Found {jobs.Count} jobs:");
     foreach (var job in jobs)
@@ -127,7 +98,7 @@ static int RunQueryJobsMode(IHost host, string email, string? employer, string? 
     return 0;
 }
 
-static int RunDiscardJobMode(IHost host, string email, Guid internalId)
+static int RunDiscardJobMode(IHost host, Guid internalId)
 {
     var repository = ServiceProviderServiceExtensions.GetRequiredService<JobRepository>(host.Services);
     var success = repository.SoftDeleteAsync(internalId).Result;
@@ -158,14 +129,8 @@ static int RunListDiscardedMode(IHost host, string email)
     return 0;
 }
 
-static int RunSearchMode(IHost host, string email, string keywords, string? resumePath, string location, string zipCode)
+static int RunSearchMode(IHost host, CliOptions options)
 {
- if (string.IsNullOrEmpty(resumePath))
-    {
-        Console.Error.WriteLine("Resume path is required. Use --resume=path/to/resume.txt");
-        return 1;
-    }
-
     var llmConfig = ServiceProviderServiceExtensions.GetRequiredService<IOptions<LlmConfiguration>>(host.Services).Value;
     var httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
     httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("FidalgoAgent/1.0");
@@ -176,14 +141,14 @@ static int RunSearchMode(IHost host, string email, string keywords, string? resu
     var saveJobTool = ServiceProviderServiceExtensions.GetRequiredService<SaveJobTool>(host.Services);
     var getJobsTool = ServiceProviderServiceExtensions.GetRequiredService<GetJobsTool>(host.Services);
 
-    var resumeContent = File.ReadAllText(resumePath);
+    var resumeContent = File.ReadAllText(options.ResumePath);
 
     var loggerFactory = ServiceProviderServiceExtensions.GetRequiredService<ILoggerFactory>(host.Services);
     var logger = loggerFactory.CreateLogger<JobSearchAgent>();
 
-    var agent = new JobSearchAgent(chatClient, fetchTool, saveJobTool, getJobsTool, email, resumeContent, location, zipCode, logger);
+    var agent = new JobSearchAgent(chatClient, fetchTool, saveJobTool, getJobsTool, options.Email, resumeContent, options.Location, options.ZipCode, logger);
 
-    var result = agent.RunAsync(keywords).Result;
+    var result = agent.RunAsync(options.Keywords).Result;
     
     Console.WriteLine($"Search complete. Processed {result} messages.");
     return 0;
