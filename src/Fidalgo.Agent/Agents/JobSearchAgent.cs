@@ -86,20 +86,15 @@ public class JobSearchAgent
             _logger.LogInformation("Calling LLM (Message #{MessageCount})", messageCount + 1);
             
             _logger.LogInformation("Starting streaming response...");
-            var streamingUpdates = _chatClient.CompleteChatStreamingAsync(messages, options, cancellationToken);
             
-            await foreach (var update in streamingUpdates)
+            await foreach (var update in _chatClient.CompleteChatStreamingAsync(messages, options, cancellationToken))
             {
-                if (update.ContentUpdate.Count > 0)
+                for (int i = 0; i < update.ContentUpdate.Count; i++)
                 {
-                    _logger.LogInformation("Streaming content: {Content}", update.ContentUpdate[0].Text);
-                }
-                
-                if (update.ToolCallUpdates.Count > 0)
-                {
-                    foreach (var toolCallUpdate in update.ToolCallUpdates)
+                    var contentPart = update.ContentUpdate[i];
+                    if (!string.IsNullOrEmpty(contentPart.Text))
                     {
-                        _logger.LogInformation("Streaming tool call: {ToolName}", toolCallUpdate.FunctionName);
+                        _logger.LogInformation("Streaming content: {Content}", contentPart.Text);
                     }
                 }
             }

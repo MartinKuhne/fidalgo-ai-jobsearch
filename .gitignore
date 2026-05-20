@@ -211,3 +211,6 @@ FakesAssemblies/
 
 **/bin/
 **/obj/
+
+# Resumes
+.users/
