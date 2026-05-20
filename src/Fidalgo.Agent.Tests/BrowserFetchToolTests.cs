@@ -1,3 +1,4 @@
+using Fidalgo.Agent.Sanitization;
 using Fidalgo.Agent.Tools;
     using Fidalgo.Agent.Models;
     using Microsoft.Extensions.Logging;
@@ -16,7 +17,8 @@ public class BrowserFetchToolTests
     {
         var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
         var logger = loggerFactory.CreateLogger<BrowserFetchTool>();
-        _tool = new BrowserFetchTool(logger);
+        var htmlStripper = new HtmlStripper();
+        _tool = new BrowserFetchTool(logger, htmlStripper);
     }
 
     [Fact]

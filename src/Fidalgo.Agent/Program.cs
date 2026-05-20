@@ -1,12 +1,14 @@
 using OpenAI;
 using OpenAI.Chat;
 using System.ClientModel;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 using Serilog;
+using Serilog.Events;
 using Serilog.Extensions.Hosting;
 using Fidalgo.Agent.Configuration;
 using Fidalgo.Agent.DependencyInjection;
@@ -22,6 +24,7 @@ using Fidalgo.Agent.Retry;
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Warning)
     .CreateLogger();
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -48,19 +51,23 @@ builder.Services.AddSingleton<IOtlpExporter, OtlpExporter>();
 
 var host = builder.Build();
 
+using var scope = host.Services.CreateScope();
+var db = scope.ServiceProvider.GetRequiredService<JobDbContext>();
+await db.Database.MigrateAsync();
+
 var cliOptions = host.Services.GetRequiredService<IOptions<CliOptions>>().Value;
 
-if (string.IsNullOrEmpty(cliOptions.ResumePath) && !cliOptions.QueryJobs && cliOptions.DiscardJobId is null && !cliOptions.ListDiscarded)
+if (string.IsNullOrEmpty(cliOptions.Resume) && !cliOptions.QueryJobs && cliOptions.DiscardJobId is null && !cliOptions.ListDiscarded)
 {
     Console.WriteLine("Error: --resume is required");
     return 1;
 }
 
-if (!string.IsNullOrEmpty(cliOptions.ResumePath) && !cliOptions.QueryJobs && cliOptions.DiscardJobId is null && !cliOptions.ListDiscarded)
+if (!string.IsNullOrEmpty(cliOptions.Resume) && !cliOptions.QueryJobs && cliOptions.DiscardJobId is null && !cliOptions.ListDiscarded)
 {
-    if (!File.Exists(cliOptions.ResumePath))
+    if (!File.Exists(cliOptions.Resume))
     {
-        Console.WriteLine($"Error: Resume file not found: {cliOptions.ResumePath}");
+        Console.WriteLine($"Error: Resume file not found: {cliOptions.Resume}");
         return 1;
     }
 }
@@ -141,12 +148,12 @@ static int RunSearchMode(IHost host, CliOptions options)
     var saveJobTool = ServiceProviderServiceExtensions.GetRequiredService<SaveJobTool>(host.Services);
     var getJobsTool = ServiceProviderServiceExtensions.GetRequiredService<GetJobsTool>(host.Services);
 
-    var resumeContent = File.ReadAllText(options.ResumePath);
+    var resumeContent = File.ReadAllText(options.Resume);
 
     var loggerFactory = ServiceProviderServiceExtensions.GetRequiredService<ILoggerFactory>(host.Services);
     var logger = loggerFactory.CreateLogger<JobSearchAgent>();
 
-    var agent = new JobSearchAgent(chatClient, fetchTool, saveJobTool, getJobsTool, options.Email, resumeContent, options.Location, options.ZipCode, logger);
+    var agent = new JobSearchAgent(chatClient, fetchTool, saveJobTool, getJobsTool, options.Email, resumeContent, options.ZipCode, logger);
 
     var result = agent.RunAsync(options.Keywords).Result;
     

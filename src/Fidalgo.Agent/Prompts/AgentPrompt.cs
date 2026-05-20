@@ -36,14 +36,13 @@ public static class AgentPrompt
         throw new FileNotFoundException("AgentPrompt.md not found at: " + promptPath);
     }
 
-    public static string Generate(string email, string query, string resume, string location, string zipCode)
+    public static string Generate(string email, string query, string resume, string zipCode)
     {
         var prompt = GetPromptTemplate();
 
         prompt = prompt.Replace("{{email}}", email);
         prompt = prompt.Replace("{{resume}}", resume);
         prompt = prompt.Replace("{{query}}", query);
-        prompt = prompt.Replace("{{location}}", location);
         prompt = prompt.Replace("{{zipCode}}", zipCode);
 
         return prompt;

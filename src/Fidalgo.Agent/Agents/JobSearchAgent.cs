@@ -16,7 +16,6 @@ public class JobSearchAgent
     private readonly GetJobsTool _getJobsTool;
     private readonly string _email;
     private readonly string _resume;
-    private readonly string _location;
     private readonly string _zipCode;
     private readonly ILogger<JobSearchAgent> _logger;
 
@@ -27,7 +26,6 @@ public class JobSearchAgent
         GetJobsTool getJobsTool,
         string email,
         string resume,
-        string location,
         string zipCode,
         ILogger<JobSearchAgent> logger = null!)
     {
@@ -37,7 +35,6 @@ public class JobSearchAgent
         _getJobsTool = getJobsTool;
         _email = email;
         _resume = resume;
-        _location = location;
         _zipCode = zipCode;
         _logger = logger;
     }
@@ -49,7 +46,7 @@ public class JobSearchAgent
     {
         var query = BuildSearchQuery(keywords);
         var resume = TruncateResume(_resume);
-        var prompt = AgentPrompt.Generate(_email, query, resume, _location, _zipCode);
+        var prompt = AgentPrompt.Generate(_email, query, resume, _zipCode);
 
         var messages = new List<ChatMessage>
         {

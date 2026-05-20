@@ -13,9 +13,7 @@ public record CliOptions
     [Required]
     public string Keywords { get; set; } = string.Empty;
 
-    public string ResumePath { get; set; } = string.Empty;
-    public string? NarrativePath { get; set; }
-    public string Location { get; set; } = "United States";
+    public string Resume { get; set; } = string.Empty;
     [Required]
     public string ZipCode { get; set; } = string.Empty;
     public bool QueryJobs { get; set; }

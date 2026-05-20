@@ -27,6 +27,7 @@ public static class ServiceCollectionExtensions
 
         // Services
         services.AddScoped<HtmlSanitizer>();
+        services.AddScoped<HtmlStripper>();
 
         // Browser Fetch Tool
         services.AddOptions<BrowserFetchOptions>()
