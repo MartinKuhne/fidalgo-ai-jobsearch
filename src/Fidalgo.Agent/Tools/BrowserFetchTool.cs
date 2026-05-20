@@ -39,6 +39,12 @@ public class BrowserFetchTool : IBrowserFetchTool
             {
                 var timeout = request.TimeoutMilliseconds ?? request.BrowserConfiguration?.TimeoutMilliseconds ?? 30000;
 
+                await page.GotoAsync(request.Url, new PageGotoOptions
+                {
+                    WaitUntil = WaitUntilState.NetworkIdle,
+                    Timeout = timeout,
+                });
+
                 if (!string.IsNullOrEmpty(request.WaitForSelector))
                 {
                     var waitStartTime = DateTime.UtcNow;
@@ -51,12 +57,6 @@ public class BrowserFetchTool : IBrowserFetchTool
 
                     waitDurationMs = (int)(DateTime.UtcNow - waitStartTime).TotalMilliseconds;
                 }
-
-                await page.GotoAsync(request.Url, new PageGotoOptions
-                {
-                    WaitUntil = WaitUntilState.NetworkIdle,
-                    Timeout = timeout,
-                });
 
                 var content = await page.ContentAsync();
 
