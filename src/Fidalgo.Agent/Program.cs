@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Extensions.Hosting;
 using Fidalgo.Agent.Configuration;
@@ -43,7 +44,6 @@ builder.Services.AddSingleton<IExceptionMapper, ExceptionMapper>();
 builder.Services.AddSingleton<IRetryPolicy, RetryPolicy>();
 builder.Services.AddSingleton<ITraceContextPropagator, TraceContextPropagator>();
 builder.Services.AddSingleton<IOtlpExporter, OtlpExporter>();
-builder.Services.AddSingleton<JobSearchAgent>();
 
 var host = builder.Build();
 
@@ -166,7 +166,10 @@ var llmConfig = ServiceProviderServiceExtensions.GetRequiredService<IOptions<Llm
     var resumeContent = File.ReadAllText(resumePath);
     var narrativeContent = !string.IsNullOrEmpty(narrativePath) ? File.ReadAllText(narrativePath) : null;
 
-    var agent = ServiceProviderServiceExtensions.GetRequiredService<JobSearchAgent>(host.Services);
+    var loggerFactory = ServiceProviderServiceExtensions.GetRequiredService<ILoggerFactory>(host.Services);
+    var logger = loggerFactory.CreateLogger<JobSearchAgent>();
+
+    var agent = new JobSearchAgent(chatClient, fetchTool, saveJobTool, getJobsTool, email, resumeContent, narrativeContent, logger);
 
     var result = agent.RunAsync(keywords).Result;
     
