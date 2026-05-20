@@ -84,22 +84,43 @@ public class JobSearchAgent
         {
             requiresAction = false;
             _logger.LogInformation("Calling LLM (Message #{MessageCount})", messageCount + 1);
-            ChatCompletion completion = await _chatClient.CompleteChatAsync(messages, options, cancellationToken);
-
+            
+            _logger.LogInformation("Starting streaming response...");
+            var streamingUpdates = _chatClient.CompleteChatStreamingAsync(messages, options, cancellationToken);
+            
+            await foreach (var update in streamingUpdates)
+            {
+                if (update.ContentUpdate.Count > 0)
+                {
+                    _logger.LogInformation("Streaming content: {Content}", update.ContentUpdate[0].Text);
+                }
+                
+                if (update.ToolCallUpdates.Count > 0)
+                {
+                    foreach (var toolCallUpdate in update.ToolCallUpdates)
+                    {
+                        _logger.LogInformation("Streaming tool call: {ToolName}", toolCallUpdate.FunctionName);
+                    }
+                }
+            }
+            
+            _logger.LogInformation("Streaming completed, getting final completion...");
+            var fullCompletionResult = await _chatClient.CompleteChatAsync(messages, options, cancellationToken);
+            var fullCompletion = fullCompletionResult.Value;
             messageCount++;
 
-            switch (completion.FinishReason)
+            switch (fullCompletion.FinishReason)
             {
                 case ChatFinishReason.Stop:
                     _logger.LogInformation("LLM completed successfully");
-                    messages.Add(new AssistantChatMessage(completion));
+                    messages.Add(new AssistantChatMessage(fullCompletion));
                     break;
 
                 case ChatFinishReason.ToolCalls:
-                    _logger.LogInformation("LLM requested {ToolCallCount} tool calls", completion.ToolCalls.Count);
-                    messages.Add(new AssistantChatMessage(completion));
+                    _logger.LogInformation("LLM requested {ToolCallCount} tool calls", fullCompletion.ToolCalls.Count);
+                    messages.Add(new AssistantChatMessage(fullCompletion));
 
-                    foreach (ChatToolCall toolCall in completion.ToolCalls)
+                    foreach (ChatToolCall toolCall in fullCompletion.ToolCalls)
                     {
                         _logger.LogInformation("Executing tool call: {ToolName} with arguments: {Arguments}", 
                             toolCall.FunctionName, toolCall.FunctionArguments);
@@ -112,7 +133,7 @@ public class JobSearchAgent
                     break;
 
                 default:
-                    throw new NotImplementedException($"Chat finish reason {completion.FinishReason} is not implemented");
+                    throw new NotImplementedException($"Chat finish reason {fullCompletion.FinishReason} is not implemented");
             }
         } while (requiresAction);
 
