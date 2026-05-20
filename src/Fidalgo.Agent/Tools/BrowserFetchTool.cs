@@ -9,16 +9,16 @@ namespace Fidalgo.Agent.Tools;
 /// </summary>
 public class BrowserFetchTool : IBrowserFetchTool
 {
-    private readonly ILogger<BrowserFetchTool>? _logger;
+    private readonly ILogger<BrowserFetchTool> _logger;
 
-    public BrowserFetchTool(ILogger<BrowserFetchTool>? logger = null)
+    public BrowserFetchTool(ILogger<BrowserFetchTool> logger)
     {
         _logger = logger;
     }
     /// <inheritdoc/>
     public async Task<FetchResult> FetchAsync(FetchRequest request, CancellationToken cancellationToken = default)
     {
-        _logger?.LogInformation("Fetching URL: {Url}", request.Url);
+        _logger.LogInformation("Fetching URL: {Url}", request.Url);
 
         var startTime = DateTime.UtcNow;
         var hasWaited = false;
@@ -71,7 +71,7 @@ public class BrowserFetchTool : IBrowserFetchTool
 
             var totalDuration = (int)(DateTime.UtcNow - startTime).TotalMilliseconds;
 
-            _logger?.LogInformation("Successfully fetched URL: {Url} in {Duration}ms", request.Url, totalDuration);
+            _logger.LogInformation("Successfully fetched URL: {Url} in {Duration}ms", request.Url, totalDuration);
 
             return new FetchResult(
                 Url: request.Url,
@@ -89,7 +89,7 @@ public class BrowserFetchTool : IBrowserFetchTool
         }
         catch (TimeoutException ex)
         {
-            _logger?.LogError(ex, "Request to {Url} timed out after {Timeout}ms", request.Url, request.TimeoutMilliseconds ?? request.BrowserConfiguration?.TimeoutMilliseconds ?? 30000);
+            _logger.LogError(ex, "Request to {Url} timed out after {Timeout}ms", request.Url, request.TimeoutMilliseconds ?? request.BrowserConfiguration?.TimeoutMilliseconds ?? 30000);
             var timeout = request.TimeoutMilliseconds ?? request.BrowserConfiguration?.TimeoutMilliseconds ?? 30000;
             return new FetchResult(
                 Url: request.Url,
@@ -102,7 +102,7 @@ public class BrowserFetchTool : IBrowserFetchTool
         }
         catch (HttpRequestException ex) when (ex.StatusCode != null)
         {
-            _logger?.LogError(ex, "Failed to navigate to {Url}: HTTP {StatusCode}", request.Url, ex.StatusCode);
+            _logger.LogError(ex, "Failed to navigate to {Url}: HTTP {StatusCode}", request.Url, ex.StatusCode);
             return new FetchResult(
                 Url: request.Url,
                 Content: string.Empty,
@@ -114,7 +114,7 @@ public class BrowserFetchTool : IBrowserFetchTool
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Failed to fetch {Url}: {Message}", request.Url, ex.Message);
+            _logger.LogError(ex, "Failed to fetch {Url}: {Message}", request.Url, ex.Message);
             return new FetchResult(
                 Url: request.Url,
                 Content: string.Empty,

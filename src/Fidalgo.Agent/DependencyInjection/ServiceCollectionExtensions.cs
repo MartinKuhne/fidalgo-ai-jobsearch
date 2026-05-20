@@ -35,6 +35,10 @@ public static class ServiceCollectionExtensions
             .ValidateOnStart();
         services.AddScoped<IBrowserFetchTool, BrowserFetchTool>();
 
+        // Tools
+        services.AddScoped<SaveJobTool>();
+        services.AddScoped<GetJobsTool>();
+
         // Configuration
         services.AddSingleton<CliOptions>();
 

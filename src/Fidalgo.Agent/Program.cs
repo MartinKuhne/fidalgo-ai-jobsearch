@@ -43,6 +43,7 @@ builder.Services.AddSingleton<IExceptionMapper, ExceptionMapper>();
 builder.Services.AddSingleton<IRetryPolicy, RetryPolicy>();
 builder.Services.AddSingleton<ITraceContextPropagator, TraceContextPropagator>();
 builder.Services.AddSingleton<IOtlpExporter, OtlpExporter>();
+builder.Services.AddSingleton<JobSearchAgent>();
 
 var host = builder.Build();
 
@@ -102,7 +103,7 @@ return RunSearchMode(host, email, keywords, resumePath, !string.IsNullOrEmpty(na
 static int RunQueryJobsMode(IHost host, string email, string? employer, string? dateFrom, string? dateTo, string? sourceWebsite)
 {
     var repository = ServiceProviderServiceExtensions.GetRequiredService<JobRepository>(host.Services);
-    var tool = new GetJobsTool(repository);
+    var tool = ServiceProviderServiceExtensions.GetRequiredService<GetJobsTool>(host.Services);
     
     DateTime? from = null, to = null;
     if (!string.IsNullOrEmpty(dateFrom) && DateTime.TryParse(dateFrom, out var df)) from = df;
@@ -152,20 +153,20 @@ static int RunListDiscardedMode(IHost host, string email)
 
 static int RunSearchMode(IHost host, string email, string keywords, string resumePath, string? narrativePath)
 {
-    var llmConfig = ServiceProviderServiceExtensions.GetRequiredService<IOptions<LlmConfiguration>>(host.Services).Value;
+var llmConfig = ServiceProviderServiceExtensions.GetRequiredService<IOptions<LlmConfiguration>>(host.Services).Value;
     var httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
     httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("FidalgoAgent/1.0");
     
     var chatClient = new ChatClient(llmConfig.Model, new ApiKeyCredential(llmConfig.ApiKey), new OpenAIClientOptions { Endpoint = new Uri(llmConfig.Endpoint) });
 
     var fetchTool = ServiceProviderServiceExtensions.GetRequiredService<IBrowserFetchTool>(host.Services);
-    var saveJobTool = new SaveJobTool(ServiceProviderServiceExtensions.GetRequiredService<JobRepository>(host.Services));
-    var getJobsTool = new GetJobsTool(ServiceProviderServiceExtensions.GetRequiredService<JobRepository>(host.Services));
+    var saveJobTool = ServiceProviderServiceExtensions.GetRequiredService<SaveJobTool>(host.Services);
+    var getJobsTool = ServiceProviderServiceExtensions.GetRequiredService<GetJobsTool>(host.Services);
 
     var resumeContent = File.ReadAllText(resumePath);
     var narrativeContent = !string.IsNullOrEmpty(narrativePath) ? File.ReadAllText(narrativePath) : null;
 
-    var agent = new JobSearchAgent(chatClient, fetchTool, saveJobTool, getJobsTool, email, resumeContent, narrativeContent);
+    var agent = ServiceProviderServiceExtensions.GetRequiredService<JobSearchAgent>(host.Services);
 
     var result = agent.RunAsync(keywords).Result;
     

@@ -1,5 +1,6 @@
 using Fidalgo.Agent.Tools;
     using Fidalgo.Agent.Models;
+    using Microsoft.Extensions.Logging;
 
 namespace Fidalgo.Agent.Tests;
 
@@ -13,7 +14,9 @@ public class BrowserFetchToolTests
 
     public BrowserFetchToolTests()
     {
-        _tool = new BrowserFetchTool();
+        var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+        var logger = loggerFactory.CreateLogger<BrowserFetchTool>();
+        _tool = new BrowserFetchTool(logger);
     }
 
     [Fact]
