@@ -2,6 +2,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using System.ComponentModel.DataAnnotations;
+using OpenAI;
+using OpenAI.Chat;
+using System.ClientModel;
 
 namespace Fidalgo.Agent.Configuration;
 
@@ -32,6 +35,14 @@ public static class LlmConfigurationExtensions
             var config = sp.GetRequiredService<IOptions<LlmConfiguration>>().Value;
             return new Uri(config.Endpoint);
         });
+
+        services.AddSingleton<ChatClient>(sp =>
+        {
+            var config = sp.GetRequiredService<IOptions<LlmConfiguration>>().Value;
+            var endpoint = sp.GetRequiredService<Uri>();
+            return new ChatClient(config.Model, new ApiKeyCredential(config.ApiKey), new OpenAIClientOptions { Endpoint = endpoint });
+        });
+
         return services;
     }
 }
