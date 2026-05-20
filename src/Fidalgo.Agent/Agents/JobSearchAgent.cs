@@ -2,7 +2,8 @@ using OpenAI.Chat;
     using Fidalgo.Agent.Prompts;
     using Fidalgo.Agent.Tools;
     using Fidalgo.Agent.Models;
-    using System.Text.Json;
+using System.Text.Json;
+using System.Linq;
     using Microsoft.Extensions.Logging;
 
 namespace Fidalgo.Agent.Agents;
@@ -15,7 +16,8 @@ public class JobSearchAgent
     private readonly GetJobsTool _getJobsTool;
     private readonly string _email;
     private readonly string _resume;
-    private readonly string? _narrative;
+    private readonly string _location;
+    private readonly string _zipCode;
     private readonly ILogger<JobSearchAgent> _logger;
 
     public JobSearchAgent(
@@ -25,7 +27,8 @@ public class JobSearchAgent
         GetJobsTool getJobsTool,
         string email,
         string resume,
-        string? narrative = null,
+        string location,
+        string zipCode,
         ILogger<JobSearchAgent> logger = null!)
     {
         _chatClient = chatClient;
@@ -34,7 +37,8 @@ public class JobSearchAgent
         _getJobsTool = getJobsTool;
         _email = email;
         _resume = resume;
-        _narrative = narrative;
+        _location = location;
+        _zipCode = zipCode;
         _logger = logger;
     }
 
@@ -44,21 +48,16 @@ public class JobSearchAgent
         CancellationToken cancellationToken = default)
     {
         var query = BuildSearchQuery(keywords);
-        var prompt = AgentPrompt.Generate(_email, query, _narrative);
+        var resume = TruncateResume(_resume);
+        var prompt = AgentPrompt.Generate(_email, query, resume, _location, _zipCode);
 
         var messages = new List<ChatMessage>
         {
-            new SystemChatMessage(prompt),
-            new UserChatMessage($"Search for jobs: {keywords}. My resume: {_resume}")
+            new SystemChatMessage(prompt)
         };
 
-        if (!string.IsNullOrEmpty(_narrative))
-        {
-            messages.Add(new UserChatMessage($"Additional context: {_narrative}"));
-        }
-
         var toolFetch = ChatTool.CreateFunctionTool(
-            functionName: "fetch",
+            functionName: "playwright_fetch",
             functionDescription: "Fetch a web page and return sanitized content",
             functionParameters: BinaryData.FromString("""{"type":"object","properties":{"url":{"type":"string","description":"The URL to fetch"}},"required":["url"]}"""));
 
@@ -83,41 +82,34 @@ public class JobSearchAgent
         do
         {
             requiresAction = false;
-            _logger.LogInformation("Calling LLM (Message #{MessageCount})", messageCount + 1);
-            
-            _logger.LogInformation("Starting streaming response...");
-            
-            await foreach (var update in _chatClient.CompleteChatStreamingAsync(messages, options, cancellationToken))
-            {
-                for (int i = 0; i < update.ContentUpdate.Count; i++)
-                {
-                    var contentPart = update.ContentUpdate[i];
-                    if (!string.IsNullOrEmpty(contentPart.Text))
-                    {
-                        _logger.LogInformation("Streaming content: {Content}", contentPart.Text);
-                    }
-                }
-            }
-            
-            _logger.LogInformation("Streaming completed, getting final completion...");
-            var fullCompletionResult = await _chatClient.CompleteChatAsync(messages, options, cancellationToken);
-            var fullCompletion = fullCompletionResult.Value;
             messageCount++;
+            _logger.LogInformation("Calling LLM (Message #{MessageCount})", messageCount);
 
-            switch (fullCompletion.FinishReason)
+            ChatCompletion completion;
+            try
+            {
+                completion = _chatClient.CompleteChat(messages, options, cancellationToken);
+            }
+            catch (System.ClientModel.ClientResultException ex) when (ex.Status == 400)
+            {
+                _logger.LogError(ex, "LLM API returned 400 Bad Request. This may be due to the request being too large.");
+                _logger.LogError("Messages count: {Count}, Total content length: {TotalLength}", messages.Count, string.Join("", messages.Select(m => m.Content.ToString())).Length);
+                throw;
+            }
+
+            switch (completion.FinishReason)
             {
                 case ChatFinishReason.Stop:
                     _logger.LogInformation("LLM completed successfully");
-                    messages.Add(new AssistantChatMessage(fullCompletion));
+                    messages.Add(new AssistantChatMessage(completion));
                     break;
 
                 case ChatFinishReason.ToolCalls:
-                    _logger.LogInformation("LLM requested {ToolCallCount} tool calls", fullCompletion.ToolCalls.Count);
-                    messages.Add(new AssistantChatMessage(fullCompletion));
+                    messages.Add(new AssistantChatMessage(completion));
 
-                    foreach (ChatToolCall toolCall in fullCompletion.ToolCalls)
+                    foreach (ChatToolCall toolCall in completion.ToolCalls)
                     {
-                        _logger.LogInformation("Executing tool call: {ToolName} with arguments: {Arguments}", 
+                        _logger.LogInformation("Executing tool call: {ToolName} with arguments: {Arguments}",
                             toolCall.FunctionName, toolCall.FunctionArguments);
                         string toolResult = await ResolveToolCallAsync(toolCall, cancellationToken);
                         _logger.LogInformation("Tool call {ToolName} returned result", toolCall.FunctionName);
@@ -127,8 +119,17 @@ public class JobSearchAgent
                     requiresAction = true;
                     break;
 
+                case ChatFinishReason.Length:
+                    throw new NotImplementedException("Incomplete model output due to MaxTokens parameter or token limit exceeded.");
+
+                case ChatFinishReason.ContentFilter:
+                    throw new NotImplementedException("Omitted content due to a content filter flag.");
+
+                case ChatFinishReason.FunctionCall:
+                    throw new NotImplementedException("Deprecated in favor of tool calls.");
+
                 default:
-                    throw new NotImplementedException($"Chat finish reason {fullCompletion.FinishReason} is not implemented");
+                    throw new NotImplementedException(completion.FinishReason.ToString());
             }
         } while (requiresAction);
 
@@ -137,16 +138,16 @@ public class JobSearchAgent
 
     private async Task<string> ResolveToolCallAsync(ChatToolCall toolCall, CancellationToken cancellationToken)
     {
-        if (toolCall.FunctionName == "fetch")
+        if (toolCall.FunctionName == "playwright_fetch")
         {
             using JsonDocument arguments = JsonDocument.Parse(toolCall.FunctionArguments);
             string url = arguments.RootElement.GetProperty("url").GetString() ?? string.Empty;
-            _logger.LogInformation("Tool fetch: URL={Url}", url);
+            _logger.LogInformation("Tool playwright_fetch: URL={Url}", url);
             var request = new FetchRequest(Url: url);
             var result = await _browserFetchTool.FetchAsync(request, cancellationToken);
             if (!string.IsNullOrEmpty(result.Error))
             {
-                _logger.LogError("Tool fetch failed: {Error}", result.Error);
+                _logger.LogError("Tool playwright_fetch failed: {Error}", result.Error);
             }
             return result.Error ?? result.Content;
         }
@@ -225,6 +226,16 @@ public class JobSearchAgent
     private string BuildSearchQuery(string keywords)
     {
         return $"Search for jobs matching: {keywords}";
+    }
+
+    private string TruncateResume(string resume)
+    {
+        const int maxChars = 60000;
+        if (resume.Length <= maxChars)
+            return resume;
+
+        _logger.LogWarning("Resume truncated from {OriginalLength} to {MaxChars} characters", resume.Length, maxChars);
+        return resume[..maxChars];
     }
 
     private async Task<Guid> SaveJobWrapper(

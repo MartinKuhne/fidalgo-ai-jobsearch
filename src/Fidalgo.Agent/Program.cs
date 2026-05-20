@@ -50,7 +50,8 @@ var host = builder.Build();
 var email = args.FirstOrDefault(a => a.StartsWith("--email="))?.Split('=')[1];
 var keywords = args.FirstOrDefault(a => a.StartsWith("--keywords="))?.Split('=')[1];
 var resumePath = args.FirstOrDefault(a => a.StartsWith("--resume="))?.Split('=')[1];
-var narrativePath = args.FirstOrDefault(a => a.StartsWith("--narrative="))?.Split('=')[1];
+var location = args.FirstOrDefault(a => a.StartsWith("--location="))?.Split('=')[1] ?? "United States";
+var zipCode = args.FirstOrDefault(a => a.StartsWith("--zip="))?.Split('=')[1];
 var queryJobs = args.Any(a => a == "--query-jobs");
 var employerFilter = args.FirstOrDefault(a => a.StartsWith("--employer="))?.Split('=')[1];
 var dateFromArg = args.FirstOrDefault(a => a.StartsWith("--date-from="))?.Split('=')[1];
@@ -83,6 +84,12 @@ if (!File.Exists(resumePath) && !queryJobs && string.IsNullOrEmpty(discardJobIdA
     return 1;
 }
 
+if (string.IsNullOrEmpty(zipCode))
+{
+    Console.WriteLine("Error: --zip is required");
+    return 1;
+}
+
 if (queryJobs)
 {
     return RunQueryJobsMode(host, email, employerFilter, dateFromArg, dateToArg, sourceWebsiteFilter);
@@ -98,7 +105,7 @@ if (listDiscarded)
     return RunListDiscardedMode(host, email);
 }
 
-return RunSearchMode(host, email, keywords, resumePath, !string.IsNullOrEmpty(narrativePath) ? narrativePath : null);
+return RunSearchMode(host, email, keywords, resumePath, location, zipCode);
 
 static int RunQueryJobsMode(IHost host, string email, string? employer, string? dateFrom, string? dateTo, string? sourceWebsite)
 {
@@ -151,9 +158,15 @@ static int RunListDiscardedMode(IHost host, string email)
     return 0;
 }
 
-static int RunSearchMode(IHost host, string email, string keywords, string resumePath, string? narrativePath)
+static int RunSearchMode(IHost host, string email, string keywords, string? resumePath, string location, string zipCode)
 {
-var llmConfig = ServiceProviderServiceExtensions.GetRequiredService<IOptions<LlmConfiguration>>(host.Services).Value;
+ if (string.IsNullOrEmpty(resumePath))
+    {
+        Console.Error.WriteLine("Resume path is required. Use --resume=path/to/resume.txt");
+        return 1;
+    }
+
+    var llmConfig = ServiceProviderServiceExtensions.GetRequiredService<IOptions<LlmConfiguration>>(host.Services).Value;
     var httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
     httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("FidalgoAgent/1.0");
     
@@ -164,12 +177,11 @@ var llmConfig = ServiceProviderServiceExtensions.GetRequiredService<IOptions<Llm
     var getJobsTool = ServiceProviderServiceExtensions.GetRequiredService<GetJobsTool>(host.Services);
 
     var resumeContent = File.ReadAllText(resumePath);
-    var narrativeContent = !string.IsNullOrEmpty(narrativePath) ? File.ReadAllText(narrativePath) : null;
 
     var loggerFactory = ServiceProviderServiceExtensions.GetRequiredService<ILoggerFactory>(host.Services);
     var logger = loggerFactory.CreateLogger<JobSearchAgent>();
 
-    var agent = new JobSearchAgent(chatClient, fetchTool, saveJobTool, getJobsTool, email, resumeContent, narrativeContent, logger);
+    var agent = new JobSearchAgent(chatClient, fetchTool, saveJobTool, getJobsTool, email, resumeContent, location, zipCode, logger);
 
     var result = agent.RunAsync(keywords).Result;
     
