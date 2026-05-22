@@ -14,7 +14,7 @@ using Fidalgo.Agent.Configuration;
 using Fidalgo.Agent.DependencyInjection;
 using Fidalgo.Agent.Tools;
 using Fidalgo.Agent.Agents;
-using Fidalgo.Agent.Storage;
+using Fidalgo.Shared.Storage;
 using Fidalgo.Agent.Logging;
 using Fidalgo.Agent.Logging.Configuration;
 using Fidalgo.Agent.Tracing;

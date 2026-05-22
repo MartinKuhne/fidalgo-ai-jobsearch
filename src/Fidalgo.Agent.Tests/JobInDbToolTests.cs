@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using Fidalgo.Agent.Storage;
+using Fidalgo.Shared.Storage;
 using Moq;
 using Fidalgo.Agent.Tools;
 using Microsoft.Extensions.Logging;

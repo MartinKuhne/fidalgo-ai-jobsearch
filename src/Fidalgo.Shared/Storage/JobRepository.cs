@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using Fidalgo.Agent.Storage;
+using Fidalgo.Shared.Storage;
 
-namespace Fidalgo.Agent.Storage;
+namespace Fidalgo.Shared.Storage;
 
 public class JobRepository
 {
@@ -101,5 +101,10 @@ public class JobRepository
                 && j.SourceWebsite.Equals(sourceWebsite, StringComparison.OrdinalIgnoreCase) 
                 && j.EmployerJobId == employerJobId 
                 && !j.IsDeleted, cancellationToken);
+    }
+
+    public virtual async Task<JobEntity?> GetByIdAsync(Guid internalId, CancellationToken cancellationToken = default)
+    {
+        return await _context.Jobs.FirstOrDefaultAsync(j => j.InternalId == internalId, cancellationToken);
     }
 }

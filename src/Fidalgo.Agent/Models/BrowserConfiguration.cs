@@ -8,7 +8,8 @@ namespace Fidalgo.Agent.Models;
 /// <param name="UserAgent">Custom user agent string for HTTP requests (optional).</param>
 /// <param name="Headless">Whether to run browser in headless mode (default: true).</param>
 /// <param name="TimeoutMilliseconds">Maximum time for page operations in milliseconds (default: 30000).</param>
-/// <param name="SignInPauseSeconds">Seconds to pause when a sign-in page is detected (default: 0 = disabled).</param>
+/// <param name="SignInPauseSeconds">Seconds to pause when an Indeed sign-in page is detected (default: 0 = disabled).</param>
+/// <param name="SigninPauseSeconds">Seconds to pause when a page with "Sign in" in the title is detected (default: 120).</param>
 /// <param name="MaxWaitForInterceptSeconds">Seconds to wait for an intercept page (Cloudflare/sign-in) to resolve by reloading (default: 0 = disabled).</param>
 public record BrowserConfiguration(
     int ViewportWidth = 1920,
@@ -17,4 +18,5 @@ public record BrowserConfiguration(
     bool Headless = true,
     int TimeoutMilliseconds = 30000,
     int SignInPauseSeconds = 0,
+    int SigninPauseSeconds = 120,
     int MaxWaitForInterceptSeconds = 0);

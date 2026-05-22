@@ -1,0 +1,15 @@
+<MudList T="object">
+    <MudListItem T="object" OnClick="HandleClick">
+        <MudIcon Icon="@Icons.Material.Filled.List" />
+        <MudText>Jobs</MudText>
+    </MudListItem>
+</MudList>
+
+@code {
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+    private void HandleClick()
+    {
+        Navigation.NavigateTo("/");
+    }
+}

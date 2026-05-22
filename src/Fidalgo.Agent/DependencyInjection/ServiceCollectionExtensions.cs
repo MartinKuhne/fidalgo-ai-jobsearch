@@ -4,7 +4,7 @@ using Fidalgo.Agent.Logging;
 using Fidalgo.Agent.Models;
 using Fidalgo.Agent.Prompts;
 using Fidalgo.Agent.Sanitization;
-using Fidalgo.Agent.Storage;
+using Fidalgo.Shared.Storage;
 using Fidalgo.Agent.Tools;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;

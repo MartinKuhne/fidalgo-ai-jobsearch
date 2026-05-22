@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using Fidalgo.Agent.Storage;
+using Fidalgo.Shared.Storage;
 
-namespace Fidalgo.Agent.Storage;
+namespace Fidalgo.Shared.Storage;
 
 public class JobDbContext : DbContext
 {

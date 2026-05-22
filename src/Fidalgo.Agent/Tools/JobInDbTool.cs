@@ -1,4 +1,4 @@
-using Fidalgo.Agent.Storage;
+using Fidalgo.Shared.Storage;
 using Microsoft.Extensions.Logging;
 
 namespace Fidalgo.Agent.Tools;

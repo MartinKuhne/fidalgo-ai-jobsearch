@@ -1,0 +1,20 @@
+@using MudBlazor
+@using Microsoft.AspNetCore.Components.Routing
+
+<MudLayout denser="true">
+    <MudDrawer elevation="2" clip-mode="DrawerClipMode.Always" opened="false" disable-resize="true" disable-swipe="true" side="Side.Left" width="250px">
+        <MudToolBar>
+            <MudText Typo="Typo.h6">Fidalgo</MudText>
+        </MudToolBar>
+        <NavMenu />
+    </MudDrawer>
+    <MudMainContent>
+        <MudContainer max-width="MaxWidth.ExtraExtraLarge" class="mt-8">
+            <Router AppAssembly="@typeof(App).Assembly">
+                <Found Context="RouteData">
+                    <RouteView RouteData="@RouteData" DefaultLayout="@typeof(MainLayout)" />
+                </Found>
+            </Router>
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>

@@ -1,0 +1,120 @@
+@using Fidalgo.Shared.Storage
+@using Fidalgo.Shared.Models
+@using Fidalgo.Web.Services
+@using MudBlazor
+
+<MudText Typo="Typo.h5">@_job?.Title</MudText>
+<MudDivider />
+
+<MudGrid>
+    <MudItem xs="12" md="6">
+        <MudText Typo="Typo.subtitle2" Color="Color.Primary">Employer</MudText>
+        <MudText>@_job?.Employer</MudText>
+    </MudItem>
+    <MudItem xs="12" md="6">
+        <MudText Typo="Typo.subtitle2" Color="Color.Primary">Posted Date</MudText>
+        <MudText>@(_job?.PostedDate?.ToString("yyyy-MM-dd") ?? "N/A")</MudText>
+    </MudItem>
+    <MudItem xs="12" md="6">
+        <MudText Typo="Typo.subtitle2" Color="Color.Primary">Source Website</MudText>
+        <MudText>@_job?.SourceWebsite</MudText>
+    </MudItem>
+    <MudItem xs="12" md="6">
+        <MudText Typo="Typo.subtitle2" Color="Color.Primary">Score</MudText>
+        <MudText>@_job?.Score</MudText>
+    </MudItem>
+    <MudItem xs="12">
+        <MudText Typo="Typo.subtitle2" Color="Color.Primary">Recommendation</MudText>
+        <MudText>@_job?.Recommendation</MudText>
+    </MudItem>
+    @if (!string.IsNullOrEmpty(_job?.EmployerJobId))
+    {
+        <MudItem xs="12">
+            <MudText Typo="Typo.subtitle2" Color="Color.Primary">Employer Job ID</MudText>
+            <MudText>@_job?.EmployerJobId</MudText>
+        </MudItem>
+    }
+    @if (_job?.SalaryRangeLow.HasValue == true || _job?.SalaryRangeHigh.HasValue == true)
+    {
+        <MudItem xs="12">
+            <MudText Typo="Typo.subtitle2" Color="Color.Primary">Salary Range</MudText>
+            <MudText>@FormatSalaryRange(_job?.SalaryRangeLow, _job?.SalaryRangeHigh)</MudText>
+        </MudItem>
+    }
+    <MudItem xs="12">
+        <MudText Typo="Typo.subtitle2" Color="Color.Primary">Description</MudText>
+        <MudText>@_job?.Description</MudText>
+    </MudItem>
+    <MudItem xs="12">
+        <MudText Typo="Typo.subtitle2" Color="Color.Primary">Pros</MudText>
+        <MudText>@_job?.Pros</MudText>
+    </MudItem>
+    <MudItem xs="12">
+        <MudText Typo="Typo.subtitle2" Color="Color.Primary">Cons</MudText>
+        <MudText>@_job?.Cons</MudText>
+    </MudItem>
+    <MudItem xs="12">
+        <MudText Typo="Typo.subtitle2" Color="Color.Primary">Resume Hints</MudText>
+        <MudText>@_job?.ResumeHints</MudText>
+    </MudItem>
+    <MudItem xs="12">
+        <MudButton icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="OnDeleteClick" variant="Variant.Text">Delete Job</MudButton>
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Inject] private IDialogService? DialogService { get; set; }
+
+    [Parameter] public JobEntity? Job { get; set; }
+    
+    private JobEntity? _job;
+
+    protected override void OnInitialized()
+    {
+        _job = Job;
+    }
+
+    private string FormatSalaryRange(decimal? low, decimal? high)
+    {
+        if (low.HasValue && high.HasValue)
+        {
+            return $"${low.Value:N0} - ${high.Value:N0}";
+        }
+        if (low.HasValue)
+        {
+            return $"${low.Value:N0}+";
+        }
+        if (high.HasValue)
+        {
+            return $"Up to ${high.Value:N0}";
+        }
+        return "Not specified";
+    }
+
+    private async Task OnDeleteClick()
+    {
+        if (_job is null)
+        {
+            return;
+        }
+
+        var currentJob = _job;
+        var jobViewModel = new JobViewModel(
+            currentJob.InternalId,
+            currentJob.Email,
+            currentJob.Employer,
+            currentJob.Title,
+            currentJob.Score,
+            currentJob.Recommendation,
+            currentJob.PostedDate,
+            currentJob.SourceWebsite);
+
+        if (DialogService != null)
+        {
+            await DialogService.ShowAsync<DeleteConfirmationDialog>(
+                "Delete Job",
+                parameters: new DialogParameters { { "Job", jobViewModel } },
+                options: new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = false });
+        }
+    }
+}

@@ -62,6 +62,27 @@ public class BrowserFetchTool : IBrowserFetchTool
                     Timeout = timeout,
                 });
 
+                var signinPauseSeconds = request.BrowserConfiguration?.SigninPauseSeconds ?? 120;
+
+                if (signinPauseSeconds > 0)
+                {
+                    var isSigninPage = await DetectSigninPageAsync(page);
+
+                    if (isSigninPage)
+                    {
+                        var currentPageUrl = page.Url;
+                        var pageTitle = await page.TitleAsync();
+                        _logger.LogWarning("Sign-in page detected at {CurrentUrl} with title '{Title}'. Pausing for {Seconds} seconds to allow sign-in, then reloading.", currentPageUrl, pageTitle, signinPauseSeconds);
+                        await Task.Delay(signinPauseSeconds * 1000, cancellationToken);
+                        await page.ReloadAsync(new PageReloadOptions
+                        {
+                            WaitUntil = WaitUntilState.NetworkIdle,
+                            Timeout = timeout,
+                        });
+                        _logger.LogInformation("Page reloaded after sign-in pause at {CurrentUrl}", page.Url);
+                    }
+                }
+
                 var signInPauseSeconds = request.BrowserConfiguration?.SignInPauseSeconds ?? 0;
                 var maxWaitForInterceptSeconds = request.BrowserConfiguration?.MaxWaitForInterceptSeconds ?? 0;
 
@@ -164,18 +185,24 @@ public class BrowserFetchTool : IBrowserFetchTool
         }
     }
 
-    private async Task<bool> DetectSignInPageAsync(IPage page)
+   private async Task<bool> DetectSignInPageAsync(IPage page)
     {
         var title = await page.TitleAsync();
         var titleLower = title.ToLowerInvariant();
         var isSignInTitle = titleLower.Contains("sign in") && titleLower.Contains("indeed");
 
         var isAuthUrl = page.Url.Contains("indeed.com/auth", StringComparison.OrdinalIgnoreCase)
-                     || page.Url.Contains("secure.indeed.com/auth", StringComparison.OrdinalIgnoreCase);
+                      || page.Url.Contains("secure.indeed.com/auth", StringComparison.OrdinalIgnoreCase);
 
         var hasAuthSelector = await page.Locator("[data-tn-component=\"auth-page-email-input\"]").CountAsync();
 
         return isSignInTitle || isAuthUrl || hasAuthSelector > 0;
+    }
+
+    private async Task<bool> DetectSigninPageAsync(IPage page)
+    {
+        var title = await page.TitleAsync();
+        return title.ToLowerInvariant().Contains("sign in");
     }
 
     private async Task<bool> DetectCloudflareChallengeAsync(IPage page)

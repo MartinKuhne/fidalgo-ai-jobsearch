@@ -1,0 +1,34 @@
+@using MudBlazor
+@using Fidalgo.Shared.Models
+@using Fidalgo.Web.Services
+
+<MudDialog>
+    <DialogContent>
+        <MudText>Are you sure you want to delete this job from @Job?.Employer?</MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text" Color="Color.Secondary">Cancel</MudButton>
+        <MudButton OnClick="Confirm" Variant="Variant.Text" Color="Color.Error" dense="true">Delete</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter] public JobViewModel? Job { get; set; }
+    
+    [Inject] private IDialogReference? DialogReference { get; set; }
+    [Inject] private IJobsService? JobsService { get; set; }
+
+    private async Task Confirm()
+    {
+        if (JobsService != null && Job != null)
+        {
+            await JobsService.SoftDeleteJobAsync(Job.InternalId);
+        }
+        DialogReference?.Close(DialogResult.Ok(true));
+    }
+
+    private void Cancel()
+    {
+        DialogReference?.Close(DialogResult.Ok(false));
+    }
+}

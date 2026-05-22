@@ -1,4 +1,4 @@
-namespace Fidalgo.Agent.Storage;
+namespace Fidalgo.Shared.Storage;
 
 public class JobEntity
 {

@@ -1,0 +1,148 @@
+@page "/"
+@inject IJobsService JobsService
+@inject ITenantService TenantService
+@inject IDialogService DialogService
+@using Fidalgo.Web.Components.Components
+@using MudBlazor
+
+<MudText Typo="Typo.h4">Job Browser</MudText>
+
+<MudGrid Class="filter-grid">
+    <MudItem xs="12" md="4">
+        <MudSelect T="string" Label="Select your email" @bind-Value="SelectedEmail" 
+                   enabled="_tenantEmails != null" onvaluechanged="OnEmailChanged">
+            @if (_tenantEmails != null)
+            {
+                @foreach (var emailInfo in _tenantEmails)
+                {
+                    <MudSelectItem Value="@emailInfo.Email" text="@emailInfo.Email" />
+                }
+            }
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" md="4">
+        <MudDatePicker Label="Filter from date" @bind-Date="_dateFrom" 
+                       clearable="true" ondatechanged="OnDateFilterChanged" />
+    </MudItem>
+</MudGrid>
+
+@if (_isLoading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_jobs != null)
+{
+    @if (_jobs.TotalItems == 0)
+    {
+        <MudText Typo="Typo.body1">No jobs found for the selected filters.</MudText>
+    }
+    else
+    {
+        <MudTable Items="_jobs.Items" Hover="true" Striped="true" Dense="true" Class="job-table">
+            <HeaderContent>
+                <MudTh Class="hide-on-mobile">Score</MudTh>
+                <MudTh>Employer</MudTh>
+                <MudTh>Date</MudTh>
+                <MudTh>Title</MudTh>
+                <MudTh>Recommendation</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Score" Class="hide-on-mobile">@context.Score</MudTd>
+                <MudTd DataLabel="Employer">@context.Employer</MudTd>
+                <MudTd DataLabel="Date">@context.PostedDate?.ToString("yyyy-MM-dd")</MudTd>
+                <MudTd DataLabel="Title">
+                    <MudText text-decoration="underline" style="cursor: pointer;" onclick="@(() => ShowJobDetails(context))">
+                        @context.Title
+                    </MudText>
+                </MudTd>
+                <MudTd DataLabel="Recommendation">@context.Recommendation</MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                   onclick="@(() => ConfirmDeleteJob(context))" />
+                </MudTd>
+            </RowTemplate>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new int[] { 10, 25, 50, 100 }" />
+            </PagerContent>
+        </MudTable>
+    }
+}
+
+@code {
+    private List<TenantEmailInfo>? _tenantEmails;
+    private string? SelectedEmail;
+    private DateTime? _dateFrom;
+    private PaginatedResult<JobViewModel>? _jobs;
+    private bool _isLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isLoading = true;
+        _tenantEmails = await TenantService.GetTenantEmailsAsync();
+        _isLoading = false;
+    }
+
+    private async Task OnEmailChanged(string value)
+    {
+        SelectedEmail = value;
+        _isLoading = true;
+        StateHasChanged();
+        await LoadJobs();
+        _isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task OnDateFilterChanged(DateTime? value)
+    {
+        _dateFrom = value;
+        _isLoading = true;
+        StateHasChanged();
+        await LoadJobs();
+        _isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadJobs()
+    {
+        if (string.IsNullOrEmpty(SelectedEmail))
+        {
+            _jobs = new PaginatedResult<JobViewModel> { Items = new List<JobViewModel>(), TotalItems = 0 };
+            return;
+        }
+
+        var page = _jobs?.Page ?? 1;
+        var pageSize = _jobs?.PageSize ?? 20;
+
+        _jobs = await JobsService.GetJobsAsync(SelectedEmail, _dateFrom, page, pageSize);
+    }
+
+    private async void ShowJobDetails(JobViewModel job)
+    {
+        var jobEntity = await JobsService.GetJobByIdAsync(job.InternalId);
+        if (jobEntity == null)
+        {
+            return;
+        }
+
+        await DialogService.ShowAsync<JobDetailsModal>(
+            $"Job Details: {job.Title}",
+            options: new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
+    }
+
+    private async Task ConfirmDeleteJob(JobViewModel job)
+    {
+        var dialogRef = await DialogService.ShowAsync<DeleteConfirmationDialog>(
+            "Delete Job",
+            parameters: new DialogParameters { { "Job", job } },
+            options: new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = false });
+        
+        await LoadJobs();
+    }
+
+    private async Task DeleteJob(JobViewModel job)
+    {
+        await JobsService.SoftDeleteJobAsync(job.InternalId);
+        await LoadJobs();
+    }
+}

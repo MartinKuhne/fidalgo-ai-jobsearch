@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using Fidalgo.Agent.Storage;
+using Fidalgo.Shared.Storage;
 
 namespace Fidalgo.Agent.Tests;
 

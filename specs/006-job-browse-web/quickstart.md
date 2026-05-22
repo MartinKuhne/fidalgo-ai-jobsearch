@@ -14,35 +14,26 @@
 
 ```powershell
 # From the repository root
-dotnet restore src/Fidalgo.Web/Fidalgo.Web.csproj
-dotnet build src/Fidalgo.Web/Fidalgo.Web.csproj
+dotnet build src/Fidalgo.slnx
 ```
 
 ## Running the Web Site
 
-### Development Mode
-
 ```powershell
-# Set the database path (same as Fidalgo.Agent uses)
-$env:DATABASE_PATH = "$HOME\.config\fidalgo-jobs.db"
-
 # Run the Blazor WebAssembly project
 dotnet run --project src/Fidalgo.Web/Fidalgo.Web.csproj
 ```
 
 The site will be available at `https://localhost:5001` (or the port shown in the console output).
 
-### Configuration
+### Database
 
-The web site reads the database path from:
+The web site stores jobs in `%APPDATA%\fidalgo\jobs.db` by default. To use a database populated by `Fidalgo.Agent`, copy the agent's database to this location:
 
-1. Environment variable: `DATABASE_PATH`
-2. `appsettings.json` file in the project root:
-   ```json
-   {
-     "DatabasePath": "C:\\path\\to\\fidalgo-jobs.db"
-   }
-   ```
+```powershell
+# On Windows (PowerShell)
+Copy-Item "$HOME\.config\fidalgo-jobs.db" "$env:APPDATA\fidalgo\jobs.db" -Force
+```
 
 ## Using the Web Site
 
