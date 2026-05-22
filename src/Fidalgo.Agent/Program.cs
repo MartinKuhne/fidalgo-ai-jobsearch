@@ -36,7 +36,7 @@ builder.Configuration.AddCommandLine(args);
 
 builder.Services.AddSerilog(Log.Logger);
 builder.Services.AddCliOptions(builder.Configuration);
-builder.Services.AddAgentServices(builder.Configuration.GetSection("DatabasePath")?.Get<string>() ?? "jobs.db");
+builder.Services.AddAgentServices(builder.Configuration.GetSection("DatabasePath")?.Get<string>());
 builder.Services.AddLlmConfiguration(builder.Configuration);
 
 builder.Services.AddSingleton<ILoggingConfiguration, LoggingConfiguration>();

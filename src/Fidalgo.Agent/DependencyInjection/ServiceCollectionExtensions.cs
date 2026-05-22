@@ -14,13 +14,14 @@ namespace Fidalgo.Agent.DependencyInjection;
 
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddAgentServices(this IServiceCollection services, string databasePath = "jobs.db")
+    public static IServiceCollection AddAgentServices(this IServiceCollection services, string? databasePath = null)
     {
         services.AddAgentLogging();
 
         // Database
+        var path = databasePath ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config", "fidalgo-jobs.db");
         services.AddDbContext<JobDbContext>(options =>
-            options.UseSqlite($"Data Source={databasePath}"));
+            options.UseSqlite($"Data Source={path}"));
 
         // Repositories
         services.AddScoped<JobRepository>();

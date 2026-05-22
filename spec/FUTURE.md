@@ -3,9 +3,51 @@ HUMAN maintained file. Coding and other agents MAY NOT read this file.
 - [REQ-012] When requested the system shall send an e-mail to each user containing a list of potential jobs, ordered by match percentage, highest to lowest
 
 
-- [WEB-001] The system shall expose a simple web site allowing the user to browse the database of jobs found
-- [WEB-002] The web site shall provide filtering by date
-- [WEB-003] The web site shall provide filtering by suitability rating
-- [WEB-004] The web site shall allow the user to mark a job as applied to with a date selector, defaulting to the current date
-- [WEB-005] The web site shall allow the user to mark a job as discarded
-- [WEB-006] The web site shall now show jobs which have been discarded
+
+
+Use exactly this Markdown structure:
+
+# JobFit AI Report
+
+## Best Match
+
+- **Role:** <job title>
+- **Company:** <company>
+- **Apply decision:** Apply / Maybe / Do not apply
+- **Fit score:** <score>/100
+- **Link:** [Apply here](<job url>)
+
+**Why this is the best match:**
+
+- <specific reason>
+- <specific reason>
+- <specific reason>
+
+## Ranked Jobs
+
+| Rank | Role | Company | Apply? | Fit | Link |
+| --- | --- | --- | --- | --- | --- |
+| 1 | <role> | <company> | Apply / Maybe / Do not apply | <score>/100 | [Apply here](<url>) |
+
+## Job Notes
+
+### 1. <Role> at <Company>
+
+- **Apply decision:** Apply / Maybe / Do not apply
+- **Fit score:** <score>/100
+- **Link:** [Apply here](<job url>)
+
+**Why it fits:**
+
+- <bullet>
+- <bullet>
+
+**Concerns:**
+
+- <bullet>
+- <bullet>
+
+**Application angle:**
+
+- <how the person should position their CV/application>
+```

@@ -23,6 +23,7 @@
   - employer_job_id The job ID (if available) (text)
   - salary_range_low: The low end of the salary range (if available)
   - salary_range_high: The low end of the salary range (if available)
+  - title: The job title
   - desciption: The job description as posted (text)
   - pros: A field to incidate why it fits (text)
   - cons: A field to incidate potentical concerns (text)
@@ -39,27 +40,32 @@
 - [REQ-104] The AI agent shall use GetStreamingResponseAsync and print progress messages to the log file
 - [REQ-105] The AI agent shall use 'u-mkuhne' as the Api Key as no api key is needed for the local LLM
 
+- [WEB-001] The system shall expose a simple web site allowing the user to browse the database of jobs found
+- [WEB-002] The webs site shall display a drop-down that contains all the tenant e-mail addresses.
+- [WEB-003] When the user selects an e-mail from the drop-down, the system shall display a list of jobs for that tenant
+- [WEB-004] The list of jobs shall allow the user to filter by the date the job was found
+- [WEB-005] The list of jobs shall be ordered by suitability rating (descending) by default
+- [WEB-006] The list of jobs shall show 20 entries and a time and allow paging
+- [WEB-007] The list of jobs shall display a trashcan icon with every entry. When the user clicks on the icon, the system shall set the is_deleted field to true
+- [WEB-008] The list of jobs shall not display jobs where the is_deleted field is true
+- [WEB-010] When the user clicks on a job title in the jobs list, the system shall display a modal dialog containing all the fields of the job
+- [WEB-011] The job modal shall display a delete button that functions the same as the delete button in the jobs list
+- [WEB-100] The web site shall use Blazor as a technology foundation
+- [WEB-101] The web site and the job search agent shall use a shared library containing the db context
+- [WEB-102] The web site project shall be named Fidalgo.Web
+
+## Web site layout
+
+- Top Navbar
+- Jobs table
+
+| Score | Employer | Date | Title | Recommendation | Actions |
+| ----- | -------- | ---- | ----- | -------------- | ------- |
+
 ## Job search engines
 
 | Site           | Query template                                       |
 | -------------- | ---------------------------------------------------- |
 | indeed.com     | https://www.indeed.com/jobs?l=Seattle&q=(keywords)   |
 
-## Agent instructions
-
-```
-You are Fidalgo JobSearch AI, a focused job-search agent.
-
-Tool plan:
-- Call the fetch tool with the {{query}} argument
-- Make subsequent fetch calls to read individual job descriptions
-- When a job posting is encountered, use the get_jobs tool to identify if the job is already in the database
-- When a job is not already in the database, compare the job description to the user's resume and career narrative
-- When a job is not already in the database, identify a match score percentage.
-- When a job is not already in the database, use the save_job tool to create a permanent local record of the job posting
-- When using the save_job tool, all text files must be in markdown format
-- When using the save_job tool, create compact but actionable recommendations how the user can reshape their resume to match this job posting in the resume_hints field
-- After reading up to 100 pages, stop using fetch tool
-- Search again only if the first search returns zero usable jobs.
-- Avoid broad search pages, expired jobs, and LinkedIn unless no better source exists.
 
