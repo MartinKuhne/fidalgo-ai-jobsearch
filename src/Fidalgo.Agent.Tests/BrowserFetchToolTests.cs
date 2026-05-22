@@ -31,7 +31,7 @@ public class BrowserFetchToolTests
         var result = await _tool.FetchAsync(request);
 
         Assert.Null(result.Error);
-        Assert.Contains("<html", result.Content, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Example Domain", result.Content, StringComparison.OrdinalIgnoreCase);
         Assert.True(result.TotalDurationMilliseconds > 0);
     }
 

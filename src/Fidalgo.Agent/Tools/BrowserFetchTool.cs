@@ -53,11 +53,38 @@ public class BrowserFetchTool : IBrowserFetchTool
             {
                 var timeout = request.TimeoutMilliseconds ?? request.BrowserConfiguration?.TimeoutMilliseconds ?? 30000;
 
+               var initialUrl = request.Url;
+                var isIndeedJobs = initialUrl.Contains("indeed.com/jobs", StringComparison.OrdinalIgnoreCase);
+
                 await page.GotoAsync(request.Url, new PageGotoOptions
                 {
                     WaitUntil = WaitUntilState.NetworkIdle,
                     Timeout = timeout,
                 });
+
+                var signInPauseSeconds = request.BrowserConfiguration?.SignInPauseSeconds ?? 0;
+                var maxWaitForInterceptSeconds = request.BrowserConfiguration?.MaxWaitForInterceptSeconds ?? 0;
+
+                if (signInPauseSeconds > 0 && isIndeedJobs)
+                {
+                    var isSignInPage = await DetectSignInPageAsync(page);
+
+                    if (isSignInPage)
+                    {
+                        var currentPageUrl = page.Url;
+                        _logger.LogWarning("Indeed sign-in page detected at {CurrentUrl} (requested {OriginalUrl}). Pausing for {Seconds} seconds to allow manual sign-in.", currentPageUrl, request.Url, signInPauseSeconds);
+                        await Task.Delay(signInPauseSeconds * 1000, cancellationToken);
+                    }
+                }
+
+                if (maxWaitForInterceptSeconds > 0 && isIndeedJobs)
+                {
+                    var interceptResolved = await WaitForInterceptResolutionAsync(page, initialUrl, maxWaitForInterceptSeconds, cancellationToken);
+                    if (!interceptResolved)
+                    {
+                        _logger.LogWarning("Intercept page did not resolve within {Seconds} seconds. Proceeding with current page state.", maxWaitForInterceptSeconds);
+                    }
+                }
 
                 if (!string.IsNullOrEmpty(request.WaitForSelector))
                 {
@@ -135,6 +162,70 @@ public class BrowserFetchTool : IBrowserFetchTool
                 WaitDurationMilliseconds: hasWaited ? waitDurationMs : null,
                 Error: $"Failed to fetch {request.Url}: {ex.Message}");
         }
+    }
+
+    private async Task<bool> DetectSignInPageAsync(IPage page)
+    {
+        var title = await page.TitleAsync();
+        var titleLower = title.ToLowerInvariant();
+        var isSignInTitle = titleLower.Contains("sign in") && titleLower.Contains("indeed");
+
+        var isAuthUrl = page.Url.Contains("indeed.com/auth", StringComparison.OrdinalIgnoreCase)
+                     || page.Url.Contains("secure.indeed.com/auth", StringComparison.OrdinalIgnoreCase);
+
+        var hasAuthSelector = await page.Locator("[data-tn-component=\"auth-page-email-input\"]").CountAsync();
+
+        return isSignInTitle || isAuthUrl || hasAuthSelector > 0;
+    }
+
+    private async Task<bool> DetectCloudflareChallengeAsync(IPage page)
+    {
+        var title = await page.TitleAsync();
+        var titleLower = title.ToLowerInvariant();
+        var isChallengeTitle = titleLower.Contains("just a moment");
+
+        var bodyText = await page.TextContentAsync("body");
+        var hasVerificationHeading = bodyText is not null && bodyText.Contains("Additional Verification Required");
+
+        var hasCloudflareBox = await page.Locator("#cf-box-container").CountAsync();
+
+        return isChallengeTitle || hasVerificationHeading || hasCloudflareBox > 0;
+    }
+
+    private async Task<bool> WaitForInterceptResolutionAsync(
+        IPage page,
+        string originalUrl,
+        int maxWaitSeconds,
+        CancellationToken cancellationToken)
+    {
+        var pollInterval = TimeSpan.FromSeconds(3);
+        var maxWait = TimeSpan.FromSeconds(maxWaitSeconds);
+        var elapsed = TimeSpan.Zero;
+
+        while (elapsed < maxWait && !cancellationToken.IsCancellationRequested)
+        {
+            await Task.Delay(pollInterval, cancellationToken);
+            elapsed = pollInterval;
+
+            if (await DetectCloudflareChallengeAsync(page))
+            {
+                var currentPageUrl = page.Url;
+                _logger.LogInformation("Cloudflare challenge detected at {CurrentUrl} (requested {OriginalUrl}). Waiting for resolution...", currentPageUrl, originalUrl);
+                continue;
+            }
+
+            var isStillOnOriginalUrl = page.Url == originalUrl;
+            if (!isStillOnOriginalUrl)
+            {
+                _logger.LogInformation("Page navigated away from intercept page to {CurrentUrl}", page.Url);
+                return true;
+            }
+
+            _logger.LogDebug("Intercept page appears resolved at {CurrentUrl}", page.Url);
+            return true;
+        }
+
+        return false;
     }
 
     private async Task WriteFetchLogAsync(string fetchId, string url, string content, string? error, CancellationToken cancellationToken)

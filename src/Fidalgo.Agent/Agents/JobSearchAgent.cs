@@ -14,6 +14,7 @@ public class JobSearchAgent
     private readonly IBrowserFetchTool _browserFetchTool;
     private readonly SaveJobTool _saveJobTool;
     private readonly GetJobsTool _getJobsTool;
+    private readonly JobInDbTool _jobInDbTool;
     private readonly string _email;
     private readonly string _resume;
     private readonly string _zipCode;
@@ -24,6 +25,7 @@ public class JobSearchAgent
         IBrowserFetchTool browserFetchTool,
         SaveJobTool saveJobTool,
         GetJobsTool getJobsTool,
+        JobInDbTool jobInDbTool,
         string email,
         string resume,
         string zipCode,
@@ -33,6 +35,7 @@ public class JobSearchAgent
         _browserFetchTool = browserFetchTool;
         _saveJobTool = saveJobTool;
         _getJobsTool = getJobsTool;
+        _jobInDbTool = jobInDbTool;
         _email = email;
         _resume = resume;
         _zipCode = zipCode;
@@ -68,9 +71,14 @@ public class JobSearchAgent
             functionDescription: "Query saved jobs by filters",
             functionParameters: BinaryData.FromString("""{"type":"object","properties":{"keywords":{"type":"string","description":"Keywords to search"},"employer":{"type":"string","description":"Employer name"},"dateFrom":{"type":"string","description":"Date from"},"dateTo":{"type":"string","description":"Date to"},"sourceWebsite":{"type":"string","description":"Source website"}},"required":[]}"""));
 
+        var toolJobInDb = ChatTool.CreateFunctionTool(
+            functionName: "job_in_db",
+            functionDescription: "Check if a job already exists in the local database",
+            functionParameters: BinaryData.FromString("""{"type":"object","properties":{"email":{"type":"string","description":"User email address"},"siteUrl":{"type":"string","description":"Job board site URL (e.g., indeed.com)"},"jobId":{"type":"string","description":"Job ID from the employer"}},"required":["email","siteUrl","jobId"]}"""));
+
         var options = new ChatCompletionOptions
         {
-            Tools = { toolFetch, toolSaveJob, toolGetJobs }
+            Tools = { toolFetch, toolSaveJob, toolGetJobs, toolJobInDb }
         };
 
         int messageCount = 0;
@@ -130,6 +138,14 @@ public class JobSearchAgent
             }
         } while (requiresAction);
 
+        var lastAssistantMessage = messages.OfType<AssistantChatMessage>().LastOrDefault();
+        if (lastAssistantMessage?.Content is not null)
+        {
+            Console.WriteLine("\n--- Final Response ---");
+            Console.WriteLine(lastAssistantMessage.Content.ToString());
+            Console.WriteLine("----------------------");
+        }
+
         return messageCount;
     }
 
@@ -166,6 +182,17 @@ public class JobSearchAgent
                 GetOptionalString(arguments, "sourceWebsite"));
             _logger.LogInformation("Tool get_jobs: found {Count} jobs", jobs.Count);
             return $"Found {jobs.Count} jobs";
+        }
+        else if (toolCall.FunctionName == "job_in_db")
+        {
+            using JsonDocument arguments = JsonDocument.Parse(toolCall.FunctionArguments);
+            string email = arguments.RootElement.GetProperty("email").GetString() ?? string.Empty;
+            string siteUrl = arguments.RootElement.GetProperty("siteUrl").GetString() ?? string.Empty;
+            string jobId = arguments.RootElement.GetProperty("jobId").GetString() ?? string.Empty;
+            _logger.LogInformation("Tool job_in_db: checking email={Email}, siteUrl={SiteUrl}, jobId={JobId}", email, siteUrl, jobId);
+            var exists = await _jobInDbTool.ContainsAsync(email, siteUrl, jobId, cancellationToken);
+            _logger.LogInformation("Tool job_in_db: job exists={Exists}", exists);
+            return exists.ToString().ToLowerInvariant();
         }
         else
         {
@@ -212,7 +239,9 @@ public class JobSearchAgent
 
     private static DateTime? GetOptionalDateTime(JsonDocument arguments, string propertyName)
     {
-        return arguments.RootElement.TryGetProperty(propertyName, out JsonElement element) && !element.GetBoolean() ? DateTime.Parse(element.GetString() ?? string.Empty) : null;
+        if (!arguments.RootElement.TryGetProperty(propertyName, out JsonElement element))
+            return null;
+        return element.ValueKind == JsonValueKind.String ? DateTime.Parse(element.GetString() ?? string.Empty) : null;
     }
 
     private static decimal? GetOptionalDecimal(JsonDocument arguments, string propertyName)

@@ -147,13 +147,14 @@ static int RunSearchMode(IHost host, CliOptions options)
     var fetchTool = ServiceProviderServiceExtensions.GetRequiredService<IBrowserFetchTool>(host.Services);
     var saveJobTool = ServiceProviderServiceExtensions.GetRequiredService<SaveJobTool>(host.Services);
     var getJobsTool = ServiceProviderServiceExtensions.GetRequiredService<GetJobsTool>(host.Services);
+    var jobInDbTool = ServiceProviderServiceExtensions.GetRequiredService<JobInDbTool>(host.Services);
 
     var resumeContent = File.ReadAllText(options.Resume);
 
     var loggerFactory = ServiceProviderServiceExtensions.GetRequiredService<ILoggerFactory>(host.Services);
     var logger = loggerFactory.CreateLogger<JobSearchAgent>();
 
-    var agent = new JobSearchAgent(chatClient, fetchTool, saveJobTool, getJobsTool, options.Email, resumeContent, options.ZipCode, logger);
+    var agent = new JobSearchAgent(chatClient, fetchTool, saveJobTool, getJobsTool, jobInDbTool, options.Email, resumeContent, options.ZipCode, logger);
 
     var result = agent.RunAsync(options.Keywords).Result;
     

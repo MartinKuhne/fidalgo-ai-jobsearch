@@ -39,6 +39,7 @@ public static class ServiceCollectionExtensions
         // Tools
         services.AddScoped<SaveJobTool>();
         services.AddScoped<GetJobsTool>();
+        services.AddScoped<JobInDbTool>();
 
         // Configuration
         services.AddSingleton<CliOptions>();

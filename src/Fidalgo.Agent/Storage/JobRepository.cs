@@ -12,7 +12,7 @@ public class JobRepository
         _context = context;
     }
 
-    public async Task<Guid> SaveAsync(JobEntity job, CancellationToken cancellationToken = default)
+    public virtual async Task<Guid> SaveAsync(JobEntity job, CancellationToken cancellationToken = default)
     {
         var existing = await _context.Jobs
             .FirstOrDefaultAsync(j => j.Email == job.Email && j.EmployerJobId == job.EmployerJobId, cancellationToken);
@@ -28,7 +28,7 @@ public class JobRepository
         return job.InternalId;
     }
 
-    public async Task<List<JobEntity>> QueryAsync(
+    public virtual async Task<List<JobEntity>> QueryAsync(
         string email,
         DateTime? dateFrom = null,
         DateTime? dateTo = null,
@@ -73,7 +73,7 @@ public class JobRepository
         return await query.OrderByDescending(j => j.PostedDate ?? DateTime.MinValue).ToListAsync(cancellationToken);
     }
 
-    public async Task<bool> SoftDeleteAsync(Guid internalId, CancellationToken cancellationToken = default)
+    public virtual async Task<bool> SoftDeleteAsync(Guid internalId, CancellationToken cancellationToken = default)
     {
         var job = await _context.Jobs.FindAsync(internalId);
         if (job == null)
@@ -86,11 +86,20 @@ public class JobRepository
         return true;
     }
 
-    public async Task<List<JobEntity>> GetDiscardedAsync(string email, CancellationToken cancellationToken = default)
+    public virtual async Task<List<JobEntity>> GetDiscardedAsync(string email, CancellationToken cancellationToken = default)
     {
         return await _context.Jobs
             .Where(j => j.Email == email && j.IsDeleted)
             .OrderByDescending(j => j.PostedDate ?? DateTime.MinValue)
             .ToListAsync(cancellationToken);
+    }
+
+    public virtual async Task<bool> ExistsAsync(string email, string sourceWebsite, string employerJobId, CancellationToken cancellationToken = default)
+    {
+        return await _context.Jobs
+            .AnyAsync(j => j.Email == email 
+                && j.SourceWebsite.Contains(sourceWebsite, StringComparison.OrdinalIgnoreCase) 
+                && j.EmployerJobId == employerJobId 
+                && !j.IsDeleted, cancellationToken);
     }
 }
