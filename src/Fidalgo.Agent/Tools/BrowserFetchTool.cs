@@ -205,7 +205,7 @@ public class BrowserFetchTool : IBrowserFetchTool
         while (elapsed < maxWait && !cancellationToken.IsCancellationRequested)
         {
             await Task.Delay(pollInterval, cancellationToken);
-            elapsed = pollInterval;
+            elapsed += pollInterval;
 
             if (await DetectCloudflareChallengeAsync(page))
             {
@@ -235,11 +235,19 @@ public class BrowserFetchTool : IBrowserFetchTool
             var logDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory ?? Directory.GetCurrentDirectory(), "fetch-logs");
             Directory.CreateDirectory(logDir);
             var logFilePath = Path.Combine(logDir, $"fetch-{fetchId}.html");
+            var compactFilePath = Path.Combine(logDir, $"fetch-{fetchId}.compact.html");
             var logContent = error is not null
                 ? $"<!-- Fetch failed: {error} -->\n<!-- URL: {url} -->\n"
                 : string.Empty;
             await File.WriteAllTextAsync(logFilePath, logContent + content, cancellationToken);
             _logger.LogInformation("Fetched content written to {LogPath}", logFilePath);
+
+            if (error is null && !string.IsNullOrEmpty(content))
+            {
+                var compactContent = _htmlStripper.Strip(content);
+                await File.WriteAllTextAsync(compactFilePath, logContent + compactContent, cancellationToken);
+                _logger.LogInformation("Compact content written to {CompactPath}", compactFilePath);
+            }
         }
         catch
         {

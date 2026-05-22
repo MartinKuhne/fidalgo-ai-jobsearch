@@ -98,7 +98,7 @@ public class JobRepository
     {
         return await _context.Jobs
             .AnyAsync(j => j.Email == email 
-                && j.SourceWebsite.Contains(sourceWebsite, StringComparison.OrdinalIgnoreCase) 
+                && j.SourceWebsite == sourceWebsite 
                 && j.EmployerJobId == employerJobId 
                 && !j.IsDeleted, cancellationToken);
     }
