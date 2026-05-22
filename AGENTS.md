@@ -3,6 +3,8 @@ These instructions must be followed always if you’re contributing, reviewing, 
 
 ## Process
 
+- Build command: ```dotnet build src```
+- Test command: ```dotnet test src```
 - Before starting new work, ensure the project compiles with no warnings and unit tests pass. Fix any issues and commit before starting new work
 - Always _read_ the **Architecture Memory** in the ./wiki/architecture/ folder when doing research
 - Always  _maintain_ **Architecture Memory** in the ./wiki/architecture/ folder when work is performed
