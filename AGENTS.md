@@ -4,6 +4,8 @@ These instructions must be followed always if you’re contributing, reviewing, 
 ## Process
 
 - Before starting new work, ensure the project compiles with no warnings and unit tests pass. Fix any issues and commit before starting new work
+- Always _read_ the **Architecture Memory** in the ./wiki/architecture/ folder when doing research
+- Always  _maintain_ **Architecture Memory** in the ./wiki/architecture/ folder when work is performed
 - Keep changes small and focused; work in small iterations
 - Every change must be built and tested before being commited
 - Code compiles with no warnings
@@ -94,5 +96,5 @@ These instructions must be followed always if you’re contributing, reviewing, 
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-specs/005-browser-fetch/plan.md
+specs/006-job-browse-web/plan.md
 <!-- SPECKIT END -->
