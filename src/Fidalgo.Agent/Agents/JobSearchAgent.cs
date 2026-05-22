@@ -64,7 +64,7 @@ public class JobSearchAgent
         var toolSaveJob = ChatTool.CreateFunctionTool(
             functionName: "save_job",
             functionDescription: "Save a job with analysis results",
-            functionParameters: BinaryData.FromString("""{"type":"object","properties":{"employer":{"type":"string","description":"Employer name"},"employerJobId":{"type":"string","description":"Job ID from employer"},"postedDate":{"type":"string","description":"Posted date"},"salaryRangeLow":{"type":"number","description":"Low end of salary range"},"salaryRangeHigh":{"type":"number","description":"High end of salary range"},"description":{"type":"string","description":"Job description"},"pros":{"type":"string","description":"Pros of this job"},"cons":{"type":"string","description":"Cons of this job"},"resumeHints":{"type":"string","description":"How this job matches the resume"},"score":{"type":"integer","description":"Score from 0-100"},"recommendation":{"type":"string","description":"Recommendation"},"sourceWebsite":{"type":"string","description":"Source website"}},"required":["employer","description","pros","cons","resumeHints","score","recommendation","sourceWebsite"]}"""));
+            functionParameters: BinaryData.FromString("""{"type":"object","properties":{"employer":{"type":"string","description":"Employer name"},"title":{"type":"string","description":"Job title"},"employerJobId":{"type":"string","description":"Job ID from employer"},"postedDate":{"type":"string","description":"Posted date"},"salaryRangeLow":{"type":"number","description":"Low end of salary range"},"salaryRangeHigh":{"type":"number","description":"High end of salary range"},"description":{"type":"string","description":"Job description"},"pros":{"type":"string","description":"Pros of this job"},"cons":{"type":"string","description":"Cons of this job"},"resumeHints":{"type":"string","description":"How this job matches the resume"},"score":{"type":"integer","description":"Score from 0-100"},"recommendation":{"type":"string","description":"Recommendation"},"sourceWebsite":{"type":"string","description":"Source website"}},"required":["employer","description","pros","cons","resumeHints","score","recommendation","sourceWebsite"]}"""));
 
         var toolGetJobs = ChatTool.CreateFunctionTool(
             functionName: "get_jobs",
@@ -203,6 +203,7 @@ public class JobSearchAgent
     private async Task<Guid> SaveJobFromArgumentsAsync(JsonDocument arguments, CancellationToken cancellationToken)
     {
         string employer = arguments.RootElement.GetProperty("employer").GetString() ?? string.Empty;
+        string? title = GetOptionalString(arguments, "title");
         string? employerJobId = GetOptionalString(arguments, "employerJobId");
         DateTime? postedDate = GetOptionalDateTime(arguments, "postedDate");
         decimal? salaryRangeLow = GetOptionalDecimal(arguments, "salaryRangeLow");
@@ -218,6 +219,7 @@ public class JobSearchAgent
         return await _saveJobTool.SaveAsync(
             _email,
             employer,
+            title,
             employerJobId,
             postedDate,
             salaryRangeLow,
@@ -266,6 +268,7 @@ public class JobSearchAgent
 
     private async Task<Guid> SaveJobWrapper(
         string employer,
+        string? title,
         string? employerJobId,
         DateTime? postedDate,
         decimal? salaryRangeLow,
@@ -282,6 +285,7 @@ public class JobSearchAgent
         return await _saveJobTool.SaveAsync(
             _email,
             employer,
+            title,
             employerJobId,
             postedDate,
             salaryRangeLow,

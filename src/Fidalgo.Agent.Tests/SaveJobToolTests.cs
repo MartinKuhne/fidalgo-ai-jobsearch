@@ -32,6 +32,7 @@ public class SaveJobToolTests
         var jobId = await _tool.SaveAsync(
             "test@example.com",
             "Acme Corp",
+            "Software Engineer",
             "JOB-123",
             DateTime.UtcNow,
             80000,
@@ -49,6 +50,7 @@ public class SaveJobToolTests
             It.Is<JobEntity>(j =>
                 j.Email == "test@example.com"
                 && j.Employer == "Acme Corp"
+                && j.Title == "Software Engineer"
                 && j.EmployerJobId == "JOB-123"
                 && j.Score == 85
                 && j.Recommendation == "Apply"
@@ -73,6 +75,7 @@ public class SaveJobToolTests
             null,
             null,
             null,
+            null,
             "Description",
             "Pros",
             "Cons",
@@ -84,7 +87,8 @@ public class SaveJobToolTests
         Assert.Equal(expectedId, jobId);
         _repository.Verify(r => r.SaveAsync(
             It.Is<JobEntity>(j =>
-                j.EmployerJobId == null
+                j.Title == null
+                && j.EmployerJobId == null
                 && j.PostedDate == null
                 && j.SalaryRangeLow == null
                 && j.SalaryRangeHigh == null),
@@ -99,6 +103,7 @@ public class SaveJobToolTests
             await _tool.SaveAsync(
                 "test@example.com",
                 "Acme Corp",
+                null,
                 "JOB-1",
                 null, null, null,
                 "Desc", "Pros", "Cons", "Hints",
@@ -117,6 +122,7 @@ public class SaveJobToolTests
             await _tool.SaveAsync(
                 "test@example.com",
                 "Acme Corp",
+                null,
                 "JOB-1",
                 null, null, null,
                 "Desc", "Pros", "Cons", "Hints",
@@ -134,6 +140,7 @@ public class SaveJobToolTests
             await _tool.SaveAsync(
                 "test@example.com",
                 "Acme Corp",
+                null,
                 "JOB-1",
                 null, null, null,
                 "Desc", "Pros", "Cons", "Hints",
@@ -151,6 +158,7 @@ public class SaveJobToolTests
             await _tool.SaveAsync(
                 "test@example.com",
                 "Acme Corp",
+                null,
                 "JOB-1",
                 null, null, null,
                 "Desc", "Pros", "Cons", "Hints",
@@ -173,6 +181,7 @@ public class SaveJobToolTests
         var jobId = await _tool.SaveAsync(
             "test@example.com",
             "Acme Corp",
+            null,
             "JOB-1",
             null, null, null,
             "Desc", "Pros", "Cons", "Hints",

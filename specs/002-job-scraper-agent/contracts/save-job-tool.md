@@ -5,7 +5,7 @@
 ## Signature
 
 ```
-save_job(email, employer, employer_job_id, posted_date, salary_range_low, salary_range_high, description, pros, cons, resume_hints, score, recommendation) -> job_record
+save_job(email, employer, title, employer_job_id, posted_date, salary_range_low, salary_range_high, description, pros, cons, resume_hints, score, recommendation) -> job_record
 ```
 
 ## Parameters
@@ -14,6 +14,7 @@ save_job(email, employer, employer_job_id, posted_date, salary_range_low, salary
 |-----------|------|----------|-------------|
 | email | string | Yes | User's email address |
 | employer | string | Yes | Employer name |
+| title | string | No | Job title |
 | employer_job_id | string | No | External job ID from the employer's system |
 | posted_date | DateTime | No | When the job was posted |
 | salary_range_low | decimal | No | Low end of salary range |
@@ -47,6 +48,7 @@ save_job(email, employer, employer_job_id, posted_date, salary_range_low, salary
 {
   "email": "user@example.com",
   "employer": "Microsoft",
+  "title": "Senior Software Engineer",
   "posted_date": "2026-05-15",
   "description": "## Senior Software Engineer...",
   "pros": "Strong match with cloud experience",

@@ -48,7 +48,7 @@ When looking for individual job links
 
 ## Available Tools
 - playwright_fetch(url): Fetch a web page using a real browser (Firefox) and return sanitized HTML content. Uses Playwright for full page rendering and JavaScript execution.
-- save_job(email, employer, employer_job_id, posted_date, salary_range_low, salary_range_high, description, pros, cons, resume_hints, score, recommendation): Save a job with analysis
+- save_job(email, employer, title, employer_job_id, posted_date, salary_range_low, salary_range_high, description, pros, cons, resume_hints, score, recommendation): Save a job with analysis
 - job_in_db(email, source_website, employer_job_id): Determine if the job is already contained in the local database
 
 ## Output Format

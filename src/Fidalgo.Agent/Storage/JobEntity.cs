@@ -5,6 +5,7 @@ public class JobEntity
     public Guid InternalId { get; set; } = Guid.NewGuid();
     public string Email { get; set; } = string.Empty;
     public string Employer { get; set; } = string.Empty;
+    public string? Title { get; set; }
     public DateTime? PostedDate { get; set; }
     public string? EmployerJobId { get; set; }
     public decimal? SalaryRangeLow { get; set; }

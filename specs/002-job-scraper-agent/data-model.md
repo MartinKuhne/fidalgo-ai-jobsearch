@@ -9,6 +9,7 @@ Represents a discovered and analyzed job posting stored by the system.
 | InternalId | string (GUID) | Primary Key, Auto-generated | Unique identifier for this record |
 | Email | string | Required, Indexed | Email identifier for the user |
 | Employer | string | Required | Employer or company name |
+| Title | string | Nullable | Job title |
 | PostedDate | DateTime | Nullable | When the job was posted if available |
 | EmployerJobId | string | Nullable | The job ID from the employer's system |
 | SalaryRangeLow | decimal | Nullable | Low end of the salary range |

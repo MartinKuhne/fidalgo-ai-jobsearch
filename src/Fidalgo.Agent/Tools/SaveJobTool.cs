@@ -17,6 +17,7 @@ public class SaveJobTool
     public async Task<Guid> SaveAsync(
         string email,
         string employer,
+        string? title,
         string? employerJobId,
         DateTime? postedDate,
         decimal? salaryRangeLow,
@@ -47,6 +48,7 @@ public class SaveJobTool
         {
             Email = email,
             Employer = employer,
+            Title = title,
             EmployerJobId = employerJobId,
             PostedDate = postedDate,
             SalaryRangeLow = salaryRangeLow,
