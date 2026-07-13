@@ -268,6 +268,11 @@ function App() {
               <p style={{ lineHeight: '1.6', fontSize: '0.95rem' }}>{selectedJob.aiReasoning || "No reasoning provided."}</p>
             </div>
 
+            <div style={{ marginBottom: '1.5rem', maxHeight: '300px', overflowY: 'auto', background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '4px' }}>
+              <strong style={{ display: 'block', marginBottom: '0.5rem', color: '#4ade80' }}>Job Description:</strong>
+              <div style={{ lineHeight: '1.6', fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{selectedJob.description || "No description available."}</div>
+            </div>
+
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
               {selectedJob.skills?.map(skill => (
                 <span key={skill} className="badge" style={{ background: 'rgba(255,255,255,0.1)', color: 'white' }}>{skill}</span>
@@ -291,10 +296,26 @@ function App() {
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
               <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', color: '#818cf8', fontWeight: 600 }}>Your Base Resume (Markdown/Text)</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <label style={{ color: '#818cf8', fontWeight: 600 }}>Your Base Resume (Markdown/Text)</label>
+                  <label style={{ cursor: 'pointer', background: 'rgba(255,255,255,0.1)', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.8rem' }}>
+                    Upload File
+                    <input type="file" accept=".md,.txt" style={{ display: 'none' }} onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const text = await file.text();
+                        setBaseResume(text);
+                        localStorage.setItem('baseResume', text);
+                      }
+                    }} />
+                  </label>
+                </div>
                 <textarea 
                   value={baseResume}
-                  onChange={e => setBaseResume(e.target.value)}
+                  onChange={e => {
+                    setBaseResume(e.target.value);
+                    localStorage.setItem('baseResume', e.target.value);
+                  }}
                   placeholder="Paste your current resume here..."
                   style={{ width: '100%', height: '300px', padding: '0.5rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'var(--text-main)', borderRadius: '4px', resize: 'vertical' }}
                 />
@@ -314,7 +335,7 @@ function App() {
                   style={{ width: '100%', height: '300px', padding: '1rem', background: 'white', color: 'black', borderRadius: '4px', overflowY: 'auto' }}
                 >
                   {generatingResume ? "Generating..." : (
-                    <div ref={resumePreviewRef}>
+                    <div ref={resumePreviewRef} style={{ color: '#000000', backgroundColor: '#ffffff', fontFamily: '"Segoe UI", "Helvetica Neue", Helvetica, sans-serif', fontSize: '14px', fontWeight: 'normal', lineHeight: '1.6', padding: '20px' }}>
                       <Markdown>{generatedResume || "The generated resume will appear here..."}</Markdown>
                     </div>
                   )}
