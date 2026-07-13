@@ -55,16 +55,33 @@ Fidalgo is an AI-powered job search assistant designed to autonomously find, fet
 
 ## Command Line Arguments
 
-To run the agent, use the `Fidalgo.Agent` CLI. You must provide your email, search keywords, zip code, and a path to your text-based resume.
+To run the ingestion tool, use the `Fidalgo.Ingest` CLI. It searches for jobs matching your criteria and pulls them into the database. You must provide your email, search keywords, and zip code.
+
+```text
+Usage: Fidalgo.Ingest [options]
+
+Options:
+  --Email <email>              [Required] The user's email address
+  --Keywords <keywords>        [Required] Search keywords (e.g. 'software engineer')
+  --ZipCode <zip>              [Required] Target zip code
+  --QueryJobs true             Query mode: List saved jobs
+  --EmployerFilter <name>      Query mode: Filter jobs by employer
+  --DateFrom <date>            Query mode: Filter jobs from this date
+  --DateTo <date>              Query mode: Filter jobs to this date
+  --SourceWebsiteFilter <site> Query mode: Filter by job board source
+  --Api                        Mode: Read from Adzuna API without LLM (default)
+  --Scrape                     Mode: Use LLM and playwright to scrape jobs
+  --help, -h                   Show this help message
+```
+
+To run the autonomous agent, use the `Fidalgo.Agent` CLI. It analyzes the jobs that were ingested. You must provide your email and a path to your text-based resume.
 
 ```text
 Usage: Fidalgo.Agent [options]
 
 Options:
   --Email <email>              [Required] The user's email address
-  --Keywords <keywords>        [Required] Search keywords (e.g. 'software engineer')
-  --ZipCode <zip>              [Required] Target zip code
-  --Resume <path>              [Required for search] Path to resume text file
+  --Resume <path>              [Required] Path to resume text file
   --QueryJobs true             Query mode: List saved jobs
   --EmployerFilter <name>      Query mode: Filter jobs by employer
   --DateFrom <date>            Query mode: Filter jobs from this date
@@ -72,7 +89,7 @@ Options:
   --SourceWebsiteFilter <site> Query mode: Filter by job board source
   --DiscardJobId <guid>        Discard mode: Mark a job as discarded
   --ListDiscarded true         List mode: Show all discarded jobs
-  --help, -h                   Show the help message
+  --help, -h                   Show this help message
 ```
 
 ## Getting Started
@@ -85,14 +102,19 @@ dotnet user-secrets set Adzuna:AppKey <your-app-key>
 ```
 
 2. Ensure you have a text or markdown version of your resume available (e.g., `Resume.md`).
-3. Run the agent to begin searching:
+3. Run the ingest tool to search for and download job postings:
 ```bash
-dotnet run --project src/Fidalgo.Agent --Email "you@example.com" --Keywords "software architect" --ZipCode "98033" --Resume "Resume.md"
+dotnet run --project src/Fidalgo.Ingest --Email "you@example.com" --Keywords "software architect" --ZipCode "98033"
 ```
 
-4. To view jobs the agent has saved:
+4. Run the agent to analyze the saved jobs against your resume:
 ```bash
-dotnet run --project src/Fidalgo.Agent --Email "you@example.com" --Keywords "software architect" --ZipCode "98033" --QueryJobs true
+dotnet run --project src/Fidalgo.Agent --Email "you@example.com" --Resume "Resume.md"
+```
+
+5. To view jobs the agent has saved or processed:
+```bash
+dotnet run --project src/Fidalgo.Agent --Email "you@example.com" --QueryJobs true
 ```
 
 ## AI Agent Tools
