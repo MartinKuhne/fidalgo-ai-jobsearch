@@ -316,3 +316,11 @@ body {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.resume-pdf-content {
+  color: black !important;
+  background-color: white !important;
+}
+.resume-pdf-content * {
+  color: black !important;
+}

@@ -335,7 +335,7 @@ function App() {
                   style={{ width: '100%', height: '300px', padding: '1rem', background: 'white', color: 'black', borderRadius: '4px', overflowY: 'auto' }}
                 >
                   {generatingResume ? "Generating..." : (
-                    <div ref={resumePreviewRef} style={{ color: '#000000', backgroundColor: '#ffffff', fontFamily: '"Segoe UI", "Helvetica Neue", Helvetica, sans-serif', fontSize: '14px', fontWeight: 'normal', lineHeight: '1.6', padding: '20px' }}>
+                    <div ref={resumePreviewRef} className="resume-pdf-content" style={{ backgroundColor: '#ffffff', fontFamily: '"Segoe UI", "Helvetica Neue", Helvetica, sans-serif', fontSize: '14px', fontWeight: 'normal', lineHeight: '1.6', padding: '20px' }}>
                       <Markdown>{generatedResume || "The generated resume will appear here..."}</Markdown>
                     </div>
                   )}
