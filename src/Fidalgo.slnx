@@ -1,0 +1,10 @@
+<Solution>
+  <Project Path="Fidalgo.Agent.Tests/Fidalgo.Agent.Tests.csproj" />
+  <Project Path="Fidalgo.Agent/Fidalgo.Agent.csproj" />
+  <Project Path="Fidalgo.Shared/Fidalgo.Shared.csproj" />
+  <Project Path="Fidalgo.Host/Fidalgo.Host.csproj" />
+  <Project Path="Fidalgo.Host.Tests/Fidalgo.Host.Tests.csproj" />
+  <Project Path="Fidalgo.Ingest.Tests/Fidalgo.Ingest.Tests.csproj" />
+  <Project Path="Fidalgo.Ingest/Fidalgo.Ingest.csproj" />
+  <Project Path="Fidalgo.Shared.Tests/Fidalgo.Shared.Tests.csproj" />
+</Solution>

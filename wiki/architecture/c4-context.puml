@@ -1,0 +1,41 @@
+@startuml Fidalgo_Context
+
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam rectangle {
+    BackgroundColor White
+    BorderColor #333333
+    ArrowColor #333333
+}
+
+title C4 Context Diagram - Fidalgo JobSearch AI
+
+Person(user, "End User", "A job seeker who configures search preferences, receives email reports, and browses jobs via the web UI.")
+
+System(fidalgo, "Fidalgo JobSearch AI", "Long-running containerized application that scrapes job boards, analyzes postings with a local LLM, and delivers ranked job recommendations via email and a web interface.")
+
+System_Ext(governmentjobs, "governmentjobs.com", "Government job listing board")
+System_Ext(google, "Google Search", "Web search engine for job postings")
+System_Ext(glassdoor, "glassdoor.com", "Corporate job listing board")
+System_Ext(monster, "monster.com", "Job listing board")
+System_Ext(indeed, "indeed.com", "Job listing board")
+System_Ext(linkedin, "linkedin.com", "Professional networking and job board")
+System_Ext(local_llm, "Local LLM Server\n(192.168.1.21:8080)", "OpenAI-compatible local inference server for skill extraction and suitability scoring.")
+System_Ext(smtp_server, "SMTP Server", "Outbound email relay for job report delivery.")
+
+Rel(user, fidalgo, "configures preferences\nvia JSON files\nREQ-006")
+Rel(user, fidalgo, "browses jobs,\nmarks applied/disclosed\nvia Web UI\nREQ-WEB-001..006")
+Rel(fidalgo, user, "sends ranked job report\nemail with PDF resumes\nREQ-012, REQ-013")
+
+Rel(fidalgo, governmentjobs, "scrapes job listings\nREQ-004")
+Rel(fidalgo, google, "scrapes job listings\nREQ-004")
+Rel(fidalgo, glassdoor, "scrapes job listings\nREQ-004")
+Rel(fidalgo, monster, "scrapes job listings\nREQ-004")
+Rel(fidalgo, indeed, "scrapes job listings\nREQ-004")
+Rel(fidalgo, linkedin, "scrapes job listings\nREQ-004")
+
+Rel(fidalgo, local_llm, "sends job descriptions\nfor skill extraction\nand scoring\nREQ-100")
+
+Rel(fidalgo, smtp_server, "sends email reports\nREQ-012")
+
+@enduml
