@@ -1,0 +1,6 @@
+@Fidalgo.Agent_HostAddress = http://localhost:5285
+
+GET {{Fidalgo.Agent_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -1,119 +1,73 @@
 ## Functional requirements (EARS format)
 
-- [REQ-001] The system shall produce a long running containerized image as well as a commandline program
-- [REQ-002] The system shall employ the [Micrsoft Agent Framework](https://learn.microsoft.com/en-us/agent-framework/overview/?pivots=programming-language-csharp)
-- [REQ-003] The system shall employ the latest LTS versio of the .net framework
-- [REQ-004] The system shall periodically (every four hours) scrape the following web sites with a job search for 'software engineer' and 'software engineering manager'
-  - governmentjobs.com
-  - google (the search engine, not jobs at google)
-  - glassdoor.com
-  - monster.com
-  - indeed.com
-  - linkedin.com
+- [REQ-001] The system shall produce a commandline program
+- [REQ-002] The system shall employ the [Microsoft Agent Framework](https://learn.microsoft.com/en-us/agent-framework/overview/?pivots=programming-language-csharp)
+- [REQ-003] The system shall employ the latest LTS versiom of the .net framework
+- [REQ-004] The system shall support the job web sites listed in the [Job search engines] section of this document
 - [REQ-005] The system shall support multiple users, keyed by their e-mail address
-- [REQ-006] The system shall support the following per-user options in a json file
+- [REQ-006] The system shall support the following per-user options as command line arguments
   - E-mail address
   - A list of job search keywords
   - A resume file
   - An optional career narrative file
-- [REQ-007] The system shall maintain a sqlite database containing jobs found
-- [REQ-008] For each job found, the system shall identify the top 10 technical skills sought by the employer
-- [REQ-009] For each job found, the system shall identify the top 10 interpersonal skills sought by the employer
-- [REQ-010] For each job found, the system shall identify overlap between the applicant's technical and interpersonal skills as expressed by their resume and narrative, and the skills sought by the employer
-- [REQ-011] For each job found, the system shall store
-  - The employer name
-  - The posted date
-  - A unique identifier
-  - The job ID (if available)
-  - The salary range (low and high number)
-  - The job description as posted
-  - The list of technical skills desired as identified as the previous step
-  - The list of interpersonal skills desired as identified as the previous step
-  - A suitability rating as a percentage
-  - An optional date for the user to record they have applied for the job
-  - A boolean, defaulting to false, that allows the user to discard a job when they do not plan to apply
-- [REQ-012] When requested and every day at 5am, the system shall send an e-mail to each applicant containing a list of potential jobs, ordered by match percentage, highest to lowest
-- [REQ-013] When sending out the job report email, each job shall contain a clickable link that allows the user to download a customized copy of their resume appropriate for the job offering
+- [REQ-007] The system shall maintain a sqlite database to manage jobs that have been found and analyzed
+- [REQ-008] The system shall provide a [fetch] tool for the agent to fetch a web site or retrieve a web search
+- [REQ-008b] When the fetch tool is invoked it shall remove html elements purely used for rendering such as fonts and font styles
+- [REQ-008c] When the fetch tool is invoked and it detects the "Sign in" text in the page <title>, it shall wait for 120 seconds for a second page load to allow the user to sign in
+- [REQ-008b] When the fetch tool is invoked it shall remove html elements purely used for rendering such as fonts and font styles
+- [REQ-009] The system shall provide a [save_job] tool for the agent to store a job
+- [REQ-010] The system shall provide a [get_jobs] tool for the agent to search stored jobs by date, employer, job ID and web site the job was found at 
+- [REQ-011] The [save_job] tool shall store
+  - email: The user's email address
+  - employer: The employer name
+  - posted_date: The posted date
+  - internal_id: A unique identifier (automatically generated, not an input argument)
+  - employer_job_id The job ID (if available) (text)
+  - salary_range_low: The low end of the salary range (if available)
+  - salary_range_high: The low end of the salary range (if available)
+  - title: The job title
+  - desciption: The job description as posted (text)
+  - pros: A field to incidate why it fits (text)
+  - cons: A field to incidate potentical concerns (text)
+  - resume_hints: Resume hints (text)
+  - score: A match score as a percentage (number)
+  - recommendation: An apply recommendation: Apply, Maybe, or Do not apply.
+  - is_deleted: A boolean, defaulting to false, that allows the user to discard a job when they do not plan to apply
+  - date_notified A date (nullable) to indicate when a notification was sent to the user for the job posting
 
-- [REQ-100] The system shall use a local OpenAI comatible LLM at http://192.168.1.21:8080/v1
-- [REQ-101] The system shall select a suitable technology to search the web and retrieve web pages
-- [REQ-101] The system shall select a suitable technology to create PDF pages to generate resumes
+- [REQ-100] The system shall use a local OpenAI comatible LLM at http://192.168.1.21:8080/v1 with OpenAIClient
+- [REQ-101] When the system is invoked, it shall periodically invoke the AI agent with the tools configured and the prompt listed in the [Agent instructions] section of this document
+- [REQ-102] When the system invokes the AI agent, it shall substitute the {{email}} string with the user's email
+- [REQ-103] When the system invokes the AI agent, it shall substitute the {{query}} string with the job search query
+- [REQ-104] The AI agent shall use GetStreamingResponseAsync and print progress messages to the log file
+- [REQ-105] The AI agent shall use 'u-mkuhne' as the Api Key as no api key is needed for the local LLM
 
 - [WEB-001] The system shall expose a simple web site allowing the user to browse the database of jobs found
-- [WEB-002] The web site shall provide filtering by date
-- [WEB-003] The web site shall provide filtering by suitability rating
-- [WEB-004] The web site shall allow the user to mark a job as applied to with a date selector, defaulting to the current date
-- [WEB-005] The web site shall allow the user to mark a job as discarded
-- [WEB-006] The web site shall now show jobs which have been discarded
+- [WEB-002] The webs site shall display a drop-down that contains all the tenant e-mail addresses.
+- [WEB-003] When the user selects an e-mail from the drop-down, the system shall display a list of jobs for that tenant
+- [WEB-004] The list of jobs shall allow the user to filter by the date the job was found
+- [WEB-005] The list of jobs shall be ordered by suitability rating (descending) by default
+- [WEB-006] The list of jobs shall show 20 entries and a time and allow paging
+- [WEB-007] The list of jobs shall display a trashcan icon with every entry. When the user clicks on the icon, the system shall set the is_deleted field to true
+- [WEB-008] The list of jobs shall not display jobs where the is_deleted field is true
+- [WEB-010] When the user clicks on a job title in the jobs list, the system shall display a modal dialog containing all the fields of the job
+- [WEB-011] The job modal shall display a delete button that functions the same as the delete button in the jobs list
+- [WEB-100] The web site shall use Blazor as a technology foundation
+- [WEB-101] The web site and the job search agent shall use a shared library containing the db context
+- [WEB-102] The web site project shall be named Fidalgo.Web
+
+## Web site layout
+
+- Top Navbar
+- Jobs table
+
+| Score | Employer | Date | Title | Recommendation | Actions |
+| ----- | -------- | ---- | ----- | -------------- | ------- |
+
+## Job search engines
+
+| Site           | Query template                                       |
+| -------------- | ---------------------------------------------------- |
+| indeed.com     | https://www.indeed.com/jobs?l=Seattle&q=(keywords)   |
 
 
-## Agent instructions
-
-```
-You are Fidalgo JobSearch AI, a focused job-search agent.
-
-Tool plan:
-- Call search_jobs exactly once with limit 8.
-- Read at most 3 direct job pages with read_job_page.
-- After reading up to 3 pages, stop using tools and write the report.
-- Search again only if the first search returns zero usable jobs.
-- Avoid broad search pages, expired jobs, and LinkedIn unless no better source exists.
-
-Report rules:
-- Keep the report simple, clear, and practical.
-- Use short bullets.
-- Do not use em dashes.
-- Do not use contractions.
-- Do not add text before or after the report.
-- End after the final Job Notes entry.
-- Include at least 5 ranked jobs if the search results contain at least 5 usable jobs.
-- If only 3 pages were scraped, use backup jobs from search results when they look usable.
-- Every job must include a clickable Markdown link.
-- Every job must have one apply decision: Apply, Maybe, or Do not apply.
-
-Use exactly this Markdown structure:
-
-# JobFit AI Report
-
-## Best Match
-
-- **Role:** <job title>
-- **Company:** <company>
-- **Apply decision:** Apply / Maybe / Do not apply
-- **Fit score:** <score>/100
-- **Link:** [Apply here](<job url>)
-
-**Why this is the best match:**
-
-- <specific reason>
-- <specific reason>
-- <specific reason>
-
-## Ranked Jobs
-
-| Rank | Role | Company | Apply? | Fit | Link |
-| --- | --- | --- | --- | --- | --- |
-| 1 | <role> | <company> | Apply / Maybe / Do not apply | <score>/100 | [Apply here](<url>) |
-
-## Job Notes
-
-### 1. <Role> at <Company>
-
-- **Apply decision:** Apply / Maybe / Do not apply
-- **Fit score:** <score>/100
-- **Link:** [Apply here](<job url>)
-
-**Why it fits:**
-
-- <bullet>
-- <bullet>
-
-**Concerns:**
-
-- <bullet>
-- <bullet>
-
-**Application angle:**
-
-- <how the person should position their CV/application>
-```
