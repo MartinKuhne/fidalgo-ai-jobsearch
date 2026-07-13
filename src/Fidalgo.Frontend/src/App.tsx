@@ -7,7 +7,7 @@ interface Job {
   employerJobId: string;
   sourceWebsite: string;
   title: string;
-  company: string;
+  employer: string;
   description: string;
   pay: string;
   location: string;
@@ -120,7 +120,7 @@ function App() {
           if (resumePreviewRef.current) {
              const opt: any = {
                margin:       1,
-               filename:     `Resume_${selectedJob.company.replace(/[^a-zA-Z0-9]/g, '')}.pdf`,
+               filename:     `Resume_${selectedJob.employer.replace(/[^a-zA-Z0-9]/g, '')}.pdf`,
                image:        { type: 'jpeg', quality: 0.98 },
                html2canvas:  { scale: 2 },
                jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
@@ -185,7 +185,7 @@ function App() {
         <input 
           type="text" 
           className="search-input" 
-          placeholder="Filter by title or company..." 
+          placeholder="Filter by title or employer..." 
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
         />
@@ -200,7 +200,7 @@ function App() {
               <tr>
                 <th onClick={() => handleSort('score')}>Score {getSortIcon('score')}</th>
                 <th onClick={() => handleSort('title')}>Title {getSortIcon('title')}</th>
-                <th onClick={() => handleSort('company')}>Company {getSortIcon('company')}</th>
+                <th onClick={() => handleSort('employer')}>Employer {getSortIcon('employer')}</th>
                 <th>Pay</th>
                 <th onClick={() => handleSort('recommendation')}>Recommendation {getSortIcon('recommendation')}</th>
                 <th onClick={() => handleSort('date')}>Date {getSortIcon('date')}</th>
@@ -215,7 +215,7 @@ function App() {
                     </span>
                   </td>
                   <td style={{ fontWeight: 600 }}>{job.title}</td>
-                  <td>{job.company}</td>
+                  <td>{job.employer}</td>
                   <td style={{ color: 'var(--text-muted)' }}>{job.pay || 'N/A'}</td>
                   <td>
                     <span className="badge" style={{
@@ -260,7 +260,7 @@ function App() {
         <div className="modal-overlay" onClick={() => setSelectedJob(null)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>{selectedJob.title}</h2>
-            <p style={{ color: 'var(--text-muted)', marginBottom: '0.5rem' }}>{selectedJob.company} • {selectedJob.location}</p>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '0.5rem' }}>{selectedJob.employer} • {selectedJob.location}</p>
             <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}><strong>Pay:</strong> {selectedJob.pay || 'No salary info'}</p>
             
             <div style={{ marginBottom: '1.5rem' }}>
@@ -292,7 +292,7 @@ function App() {
       {showResumeModal && selectedJob && (
         <div className="modal-overlay" onClick={() => setShowResumeModal(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '800px', width: '90vw' }}>
-            <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Generate Resume for {selectedJob.company}</h2>
+            <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Generate Resume for {selectedJob.employer}</h2>
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
               <div>

@@ -69,10 +69,10 @@ public class JobsServiceTests
         
         // Check sorting: Highest score first, then newest date first
         Assert.Equal(90, result.Items[0].Score);
-        Assert.Equal("B", result.Items[0].Company);
+        Assert.Equal("B", result.Items[0].Employer);
         
         Assert.Equal(50, result.Items[1].Score);
-        Assert.Equal("C", result.Items[1].Company); // newer date than A
+        Assert.Equal("C", result.Items[1].Employer); // newer date than A
     }
 
     [Fact]

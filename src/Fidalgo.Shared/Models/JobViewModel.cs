@@ -8,7 +8,7 @@ namespace Fidalgo.Shared.Models;
 public record JobViewModel(
     Guid InternalId,
     string Email,
-    string Company,
+    string Employer,
     string? Title,
     int Score,
     string Recommendation,

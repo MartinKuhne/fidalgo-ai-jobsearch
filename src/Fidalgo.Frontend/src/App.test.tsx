@@ -34,7 +34,7 @@ describe('App', () => {
           {
             internalId: '1',
             title: 'Software Engineer',
-            company: 'Tech Corp',
+            employer: 'Tech Corp',
             location: 'Remote',
             recommendation: 'Apply',
             pay: '$100k',
@@ -42,7 +42,7 @@ describe('App', () => {
           {
             internalId: '2',
             title: 'Backend Developer',
-            company: 'Data Inc',
+            employer: 'Data Inc',
             location: 'New York',
             recommendation: 'Do not apply',
             pay: '',
