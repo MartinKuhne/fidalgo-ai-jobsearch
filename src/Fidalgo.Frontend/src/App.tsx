@@ -270,7 +270,9 @@ function App() {
 
             <div style={{ marginBottom: '1.5rem', maxHeight: '300px', overflowY: 'auto', background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '4px' }}>
               <strong style={{ display: 'block', marginBottom: '0.5rem', color: '#4ade80' }}>Job Description:</strong>
-              <div style={{ lineHeight: '1.6', fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{selectedJob.description || "No description available."}</div>
+              <div style={{ lineHeight: '1.6', fontSize: '0.9rem' }}>
+                <Markdown>{selectedJob.description || "No description available."}</Markdown>
+              </div>
             </div>
 
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
