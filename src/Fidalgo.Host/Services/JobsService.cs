@@ -62,7 +62,9 @@ public class JobsService : IJobsService
                 excludeDeleted: true,
                 cancellationToken: cancellationToken);
 
-            var filteredJobs = (IEnumerable<JobEntity>)allJobs;
+            var filteredJobs = ((IEnumerable<JobEntity>)allJobs)
+                .Where(j => !string.Equals(j.Recommendation, "Maybe", StringComparison.OrdinalIgnoreCase) && 
+                            !string.Equals(j.Recommendation, "Do not apply", StringComparison.OrdinalIgnoreCase));
 
             if (!string.IsNullOrWhiteSpace(search))
             {
