@@ -39,7 +39,7 @@ public class BrowserFetchTool : IBrowserFetchTool
             using var playwright = await Playwright.CreateAsync();
             var browser = await playwright.Firefox.LaunchAsync(new BrowserTypeLaunchOptions
             {
-                Headless = request.BrowserConfiguration?.Headless ?? false,
+                Headless = request.BrowserConfiguration?.Headless ?? new BrowserConfiguration().Headless,
             });
 
             await using var context = await browser.NewContextAsync(new BrowserNewContextOptions
