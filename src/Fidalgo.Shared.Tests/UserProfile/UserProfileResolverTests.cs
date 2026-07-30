@@ -1,0 +1,130 @@
+using Fidalgo.Shared.UserProfile;
+using Microsoft.Extensions.Logging;
+using NSubstitute;
+using Xunit;
+
+namespace Fidalgo.Shared.Tests.UserProfile;
+
+public class UserProfileResolverTests : IDisposable
+{
+    private readonly string _tempDir;
+    private readonly ILogger<UserProfileResolver> _logger;
+    private readonly UserProfileResolver _sut;
+
+    public UserProfileResolverTests()
+    {
+        _tempDir = Path.Combine(Path.GetTempPath(), "fidalgo-usrprof-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_tempDir);
+        _logger = Substitute.For<ILogger<UserProfileResolver>>();
+        _sut = new UserProfileResolver(_logger, _tempDir);
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_tempDir))
+        {
+            Directory.Delete(_tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveCareerStoryPath_ReturnsCliPath_WhenProvidedAndExists()
+    {
+        var cliPath = Path.Combine(_tempDir, "my-story.md");
+        File.WriteAllText(cliPath, "My story");
+
+        var result = _sut.ResolveCareerStoryPath(cliPath);
+
+        Assert.Equal(cliPath, result);
+    }
+
+    [Fact]
+    public void ResolveCareerStoryPath_FallsBackToDefault_WhenCliOmittedAndDefaultExists()
+    {
+        var defaultPath = Path.Combine(_tempDir, UserProfilePaths.CareerStoryFileName);
+        File.WriteAllText(defaultPath, "Default story");
+
+        var result = _sut.ResolveCareerStoryPath(null);
+
+        Assert.Equal(defaultPath, result);
+    }
+
+    [Fact]
+    public void ResolveCareerStoryPath_FallsBackToDefault_WhenCliMissingButDefaultExists()
+    {
+        var missingCli = Path.Combine(_tempDir, "missing.md");
+        var defaultPath = Path.Combine(_tempDir, UserProfilePaths.CareerStoryFileName);
+        File.WriteAllText(defaultPath, "Default story");
+
+        var result = _sut.ResolveCareerStoryPath(missingCli);
+
+        Assert.Equal(defaultPath, result);
+    }
+
+    [Fact]
+    public void ResolveCareerStoryPath_LogsWarning_WhenCliProvidedButMissing()
+    {
+        var missingCli = Path.Combine(_tempDir, "missing.md");
+
+        _sut.ResolveCareerStoryPath(missingCli);
+
+        _logger.Received(1).Log(
+            LogLevel.Warning,
+            Arg.Any<EventId>(),
+            Arg.Any<object?>(),
+            Arg.Any<Exception?>(),
+            Arg.Any<Func<object?, Exception?, string>>());
+    }
+
+    [Fact]
+    public void ResolveCareerStoryPath_ReturnsNull_WhenNeitherExists()
+    {
+        var result = _sut.ResolveCareerStoryPath(null);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ResolveCareerStoryPath_DoesNotLog_WhenCliOmitted()
+    {
+        _sut.ResolveCareerStoryPath(null);
+
+        _logger.DidNotReceive().Log(
+            Arg.Any<LogLevel>(),
+            Arg.Any<EventId>(),
+            Arg.Any<object?>(),
+            Arg.Any<Exception?>(),
+            Arg.Any<Func<object?, Exception?, string>>());
+    }
+
+    [Fact]
+    public void ResolveCareerGoalsPath_UsesGoalsFileNameNotStoryFileName()
+    {
+        var defaultGoalsPath = Path.Combine(_tempDir, UserProfilePaths.CareerGoalsFileName);
+        File.WriteAllText(defaultGoalsPath, "Default goals");
+
+        var result = _sut.ResolveCareerGoalsPath(null);
+
+        Assert.Equal(defaultGoalsPath, result);
+        Assert.EndsWith(UserProfilePaths.CareerGoalsFileName, result);
+    }
+
+    [Fact]
+    public void ResolveCareerGoalsPath_ReturnsCliPath_WhenProvidedAndExists()
+    {
+        var cliPath = Path.Combine(_tempDir, "my-goals.md");
+        File.WriteAllText(cliPath, "My goals");
+
+        var result = _sut.ResolveCareerGoalsPath(cliPath);
+
+        Assert.Equal(cliPath, result);
+    }
+
+    [Fact]
+    public void ResolveCareerGoalsPath_ReturnsNull_WhenNeitherExists()
+    {
+        var result = _sut.ResolveCareerGoalsPath(null);
+
+        Assert.Null(result);
+    }
+}
