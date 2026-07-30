@@ -58,6 +58,7 @@ var builder = Host.CreateApplicationBuilder(args);
 string baseDir = AppContext.BaseDirectory;
 builder.Configuration.AddJsonFile(Path.Combine(baseDir, "appsettings.json"), optional: false, reloadOnChange: true);
 builder.Configuration.AddJsonFile(Path.Combine(baseDir, "appsettings.Development.json"), optional: true, reloadOnChange: true);
+builder.Configuration.AddUserProfileConfig();
 builder.Configuration.AddCommandLine(args);
 
 if (builder.Environment.IsDevelopment())

@@ -55,7 +55,7 @@ Fidalgo is an AI-powered job search assistant designed to autonomously find, fet
 
 ## Command Line Arguments
 
-To run the ingestion tool, use the `Fidalgo.Ingest` CLI. It searches for jobs matching your criteria and pulls them into the database. You must provide your email, search keywords, and zip code.
+To run the ingestion tool, use the `Fidalgo.Ingest` CLI. It searches for jobs matching your criteria and pulls them into the database. You must provide your email, search keywords, and zip code (Email and Keywords can also be loaded from `%APPDATA%\.config\Fidalgo\config.json`; CLI flags still override).
 
 ```text
 Usage: Fidalgo.Ingest [options]
@@ -74,7 +74,7 @@ Options:
   --help, -h                   Show this help message
 ```
 
-To run the autonomous agent, use the `Fidalgo.Agent` CLI. It analyzes the jobs that were ingested. You must provide your email; the resume is optional and falls back to `%APPDATA%\.config\Fidalgo\resume.md` when not passed on the command line.
+To run the autonomous agent, use the `Fidalgo.Agent` CLI. It analyzes the jobs that were ingested. You must provide your email (can also be loaded from `%APPDATA%\.config\Fidalgo\config.json`); the resume is optional and falls back to `%APPDATA%\.config\Fidalgo\resume.md` when not passed on the command line.
 
 ```text
 Usage: Fidalgo.Agent [options]
@@ -105,6 +105,15 @@ dotnet user-secrets init
 dotnet user-secrets set Adzuna:AppId <your-app-id>
 dotnet user-secrets set Adzuna:AppKey <your-app-key>
 ```
+
+1a. *(Optional)* Create a user configuration file at `%APPDATA%\.config\Fidalgo\config.json` so you don't have to pass your email and keywords every time:
+```json
+{
+  "Email": "you@example.com",
+  "JobSearchKeywords": ["software architect", "principal engineer"]
+}
+```
+Both `Fidalgo.Ingest` and `Fidalgo.Agent` load this file. Command-line flags still override values from the file.
 
 2. Drop a `resume.md` into `%APPDATA%\.config\Fidalgo\` (the default) **or** keep your resume anywhere and pass it with `--Resume`. Either way the agent finds it.
 3. *(Optional)* Drop a `career-story.md` and/or `career-goals.md` into the same `%APPDATA%\.config\Fidalgo\` directory to give the evaluator extra context about your narrative and short-term goals. You can also point at custom files via `--CareerStory` / `--CareerGoals` on the agent command line.

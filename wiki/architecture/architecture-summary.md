@@ -164,6 +164,7 @@ modes skip the resume check.
 - User resume files and career narratives are stored on the container filesystem, not in the database.
 - The optional career story and career goals live at `%APPDATA%\.config\Fidalgo\career-story.md` and `career-goals.md` by default; users may override either with the `--CareerStory` / `--CareerGoals` CLI flags on `Fidalgo.Agent`. Both are treated as user-controlled input to the LLM.
 - The resume defaults to `%APPDATA%\.config\Fidalgo\resume.md` when `--Resume` is omitted; the user may still pass any path with `--Resume`. Same warning-on-missing semantics as the other profile files.
+- A persistent user config file lives at `%APPDATA%\.config\Fidalgo\config.json`. It holds the user's email and a list of job search keywords (`JobSearchKeywords`). Both `Fidalgo.Ingest` and `Fidalgo.Agent` load it as an optional, layered `IConfiguration` source, so values from the file are the defaults but command-line flags still override. The Ingest path folds `JobSearchKeywords` into the `Keywords` string during a post-bind `Configure` step so the existing `[Required]` validation still passes.
 - SMTP credentials are injected via environment variables or Docker secrets (no hardcoded passwords).
 - The web UI has no authentication layer by requirement; in production, consider adding a simple API key or cookie-based auth.
 - The local LLM endpoint is on a private network (`192.168.1.21`), not exposed externally.
