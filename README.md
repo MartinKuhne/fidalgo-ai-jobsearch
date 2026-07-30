@@ -74,14 +74,15 @@ Options:
   --help, -h                   Show this help message
 ```
 
-To run the autonomous agent, use the `Fidalgo.Agent` CLI. It analyzes the jobs that were ingested. You must provide your email and a path to your text-based resume.
+To run the autonomous agent, use the `Fidalgo.Agent` CLI. It analyzes the jobs that were ingested. You must provide your email; the resume is optional and falls back to `%APPDATA%\.config\Fidalgo\resume.md` when not passed on the command line.
 
 ```text
 Usage: Fidalgo.Agent [options]
 
 Options:
   --Email <email>              [Required] The user's email address
-  --Resume <path>              [Required] Path to resume text file
+  --Resume <path>              Optional path to the user's resume (falls back to
+                               %APPDATA%\.config\Fidalgo\resume.md)
   --CareerStory <path>         Optional path to the user's career story (falls back to
                                %APPDATA%\.config\Fidalgo\career-story.md)
   --CareerGoals <path>         Optional path to the user's career goals (falls back to
@@ -105,8 +106,8 @@ dotnet user-secrets set Adzuna:AppId <your-app-id>
 dotnet user-secrets set Adzuna:AppKey <your-app-key>
 ```
 
-2. Ensure you have a text or markdown version of your resume available (e.g., `Resume.md`).
-3. *(Optional)* Drop a `career-story.md` and/or `career-goals.md` into `%APPDATA%\.config\Fidalgo\` to give the evaluator extra context about your narrative and short-term goals. You can also point at custom files via `--CareerStory` / `--CareerGoals` on the agent command line.
+2. Drop a `resume.md` into `%APPDATA%\.config\Fidalgo\` (the default) **or** keep your resume anywhere and pass it with `--Resume`. Either way the agent finds it.
+3. *(Optional)* Drop a `career-story.md` and/or `career-goals.md` into the same `%APPDATA%\.config\Fidalgo\` directory to give the evaluator extra context about your narrative and short-term goals. You can also point at custom files via `--CareerStory` / `--CareerGoals` on the agent command line.
 4. Run the ingest tool to search for and download job postings:
 ```bash
 dotnet run --project src/Fidalgo.Ingest --Email "you@example.com" --Keywords "software architect" --ZipCode "98033"

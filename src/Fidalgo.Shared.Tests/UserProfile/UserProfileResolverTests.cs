@@ -39,6 +39,76 @@ public class UserProfileResolverTests : IDisposable
     }
 
     [Fact]
+    public void ResolveResumePath_ReturnsCliPath_WhenProvidedAndExists()
+    {
+        var cliPath = Path.Combine(_tempDir, "my-resume.md");
+        File.WriteAllText(cliPath, "My resume");
+
+        var result = _sut.ResolveResumePath(cliPath);
+
+        Assert.Equal(cliPath, result);
+    }
+
+    [Fact]
+    public void ResolveResumePath_FallsBackToDefault_WhenCliOmittedAndDefaultExists()
+    {
+        var defaultPath = Path.Combine(_tempDir, UserProfilePaths.ResumeFileName);
+        File.WriteAllText(defaultPath, "Default resume");
+
+        var result = _sut.ResolveResumePath(null);
+
+        Assert.Equal(defaultPath, result);
+    }
+
+    [Fact]
+    public void ResolveResumePath_FallsBackToDefault_WhenCliMissingButDefaultExists()
+    {
+        var missingCli = Path.Combine(_tempDir, "missing.md");
+        var defaultPath = Path.Combine(_tempDir, UserProfilePaths.ResumeFileName);
+        File.WriteAllText(defaultPath, "Default resume");
+
+        var result = _sut.ResolveResumePath(missingCli);
+
+        Assert.Equal(defaultPath, result);
+    }
+
+    [Fact]
+    public void ResolveResumePath_LogsWarning_WhenCliProvidedButMissing()
+    {
+        var missingCli = Path.Combine(_tempDir, "missing.md");
+
+        _sut.ResolveResumePath(missingCli);
+
+        _logger.Received(1).Log(
+            LogLevel.Warning,
+            Arg.Any<EventId>(),
+            Arg.Any<object?>(),
+            Arg.Any<Exception?>(),
+            Arg.Any<Func<object?, Exception?, string>>());
+    }
+
+    [Fact]
+    public void ResolveResumePath_ReturnsNull_WhenNeitherExists()
+    {
+        var result = _sut.ResolveResumePath(null);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ResolveResumePath_DoesNotLog_WhenCliOmitted()
+    {
+        _sut.ResolveResumePath(null);
+
+        _logger.DidNotReceive().Log(
+            Arg.Any<LogLevel>(),
+            Arg.Any<EventId>(),
+            Arg.Any<object?>(),
+            Arg.Any<Exception?>(),
+            Arg.Any<Func<object?, Exception?, string>>());
+    }
+
+    [Fact]
     public void ResolveCareerStoryPath_FallsBackToDefault_WhenCliOmittedAndDefaultExists()
     {
         var defaultPath = Path.Combine(_tempDir, UserProfilePaths.CareerStoryFileName);

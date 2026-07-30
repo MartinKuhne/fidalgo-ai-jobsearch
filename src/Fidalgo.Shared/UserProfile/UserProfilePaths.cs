@@ -6,6 +6,9 @@ namespace Fidalgo.Shared.UserProfile;
 /// </summary>
 public static class UserProfilePaths
 {
+    /// <summary>Default file name for the candidate's resume.</summary>
+    public const string ResumeFileName = "resume.md";
+
     /// <summary>Default file name for the candidate's career story.</summary>
     public const string CareerStoryFileName = "career-story.md";
 

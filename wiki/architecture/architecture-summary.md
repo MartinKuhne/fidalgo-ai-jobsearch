@@ -79,8 +79,11 @@ In practice the match step is performed by the `JobEvaluationAgent`
 (`Fidalgo.Agent/Agents/JobEvaluationAgent.cs`), which receives the resume
 plus optional career story and career goals content and folds all three
 into the LLM system prompt. File resolution (CLI path or fallback to
-`%APPDATA%\.config\Fidalgo\career-story.md` / `career-goals.md`) lives
-in `Fidalgo.Shared/UserProfile/UserProfileResolver.cs`.
+`%APPDATA%\.config\Fidalgo\resume.md` / `career-story.md` /
+`career-goals.md`) lives in
+`Fidalgo.Shared/UserProfile/UserProfileResolver.cs`. The resume is
+required for the search path; QueryJobs, DiscardJobId, and ListDiscarded
+modes skip the resume check.
 
 ### 4.4 Email Service (`EmailService`)
 - Triggered daily at 05:00 by a hosted cron timer (REQ-012).
@@ -160,6 +163,7 @@ in `Fidalgo.Shared/UserProfile/UserProfileResolver.cs`.
 
 - User resume files and career narratives are stored on the container filesystem, not in the database.
 - The optional career story and career goals live at `%APPDATA%\.config\Fidalgo\career-story.md` and `career-goals.md` by default; users may override either with the `--CareerStory` / `--CareerGoals` CLI flags on `Fidalgo.Agent`. Both are treated as user-controlled input to the LLM.
+- The resume defaults to `%APPDATA%\.config\Fidalgo\resume.md` when `--Resume` is omitted; the user may still pass any path with `--Resume`. Same warning-on-missing semantics as the other profile files.
 - SMTP credentials are injected via environment variables or Docker secrets (no hardcoded passwords).
 - The web UI has no authentication layer by requirement; in production, consider adding a simple API key or cookie-based auth.
 - The local LLM endpoint is on a private network (`192.168.1.21`), not exposed externally.

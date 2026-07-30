@@ -26,6 +26,11 @@ public class UserProfileResolver
         _logger = logger;
     }
 
+    /// <summary>Resolves the on-disk path for the user's resume file, or null if neither the CLI path nor the default file exists.</summary>
+    /// <param name="cliPath">Path supplied on the command line, or null when the user did not pass the flag.</param>
+    public string? ResolveResumePath(string? cliPath) =>
+        ResolvePath(cliPath, UserProfilePaths.ResumeFileName, "resume");
+
     /// <summary>Resolves the on-disk path for the user's career story file, or null if neither the CLI path nor the default file exists.</summary>
     /// <param name="cliPath">Path supplied on the command line, or null when the user did not pass the flag.</param>
     public string? ResolveCareerStoryPath(string? cliPath) =>

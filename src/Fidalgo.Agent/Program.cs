@@ -36,7 +36,8 @@ if (args.Length == 0 || args.Contains("--help") || args.Contains("-h"))
     Console.WriteLine();
     Console.WriteLine("Options:");
     Console.WriteLine("  --Email <email>              [Required] The user's email address");
-    Console.WriteLine("  --Resume <path>              [Required] Path to resume text file");
+    Console.WriteLine("  --Resume <path>              Optional path to the user's resume (falls back to");
+    Console.WriteLine("                               %APPDATA%\\.config\\Fidalgo\\resume.md)");
     Console.WriteLine("  --CareerStory <path>         Optional path to the user's career story (falls back to");
     Console.WriteLine("                               %APPDATA%\\.config\\Fidalgo\\career-story.md)");
     Console.WriteLine("  --CareerGoals <path>         Optional path to the user's career goals (falls back to");
@@ -87,19 +88,17 @@ await db.Database.EnsureCreatedAsync();
 
 var cliOptions = host.Services.GetRequiredService<IOptions<CliOptions>>().Value;
 
-if (string.IsNullOrEmpty(cliOptions.Resume) && !cliOptions.QueryJobs && cliOptions.DiscardJobId is null && !cliOptions.ListDiscarded)
-{
-    Console.WriteLine("Error: --resume is required");
-    return 1;
-}
+var profileLogger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger<UserProfileResolver>();
+var profileResolver = new UserProfileResolver(profileLogger);
+var resumePath = profileResolver.ResolveResumePath(cliOptions.Resume);
+var careerStoryPath = profileResolver.ResolveCareerStoryPath(cliOptions.CareerStory);
+var careerGoalsPath = profileResolver.ResolveCareerGoalsPath(cliOptions.CareerGoals);
 
-if (!string.IsNullOrEmpty(cliOptions.Resume) && !cliOptions.QueryJobs && cliOptions.DiscardJobId is null && !cliOptions.ListDiscarded)
+bool resumeNotNeeded = cliOptions.QueryJobs || cliOptions.DiscardJobId is not null || cliOptions.ListDiscarded;
+if (resumePath is null && !resumeNotNeeded)
 {
-    if (!File.Exists(cliOptions.Resume))
-    {
-        Console.WriteLine($"Error: Resume file not found: {cliOptions.Resume}");
-        return 1;
-    }
+    Console.WriteLine("Error: --resume is required (or a resume.md in %APPDATA%\\.config\\Fidalgo)");
+    return 1;
 }
 
 if (cliOptions.QueryJobs)
@@ -117,7 +116,11 @@ if (cliOptions.ListDiscarded)
     return RunListDiscardedMode(host, cliOptions.Email);
 }
 
-return RunSearchMode(host, cliOptions);
+var resumeContent = File.ReadAllText(resumePath!);
+var careerStoryContent = careerStoryPath is null ? null : File.ReadAllText(careerStoryPath);
+var careerGoalsContent = careerGoalsPath is null ? null : File.ReadAllText(careerGoalsPath);
+
+return RunSearchMode(host, cliOptions, resumeContent, careerStoryContent, careerGoalsContent);
 
 static int RunQueryJobsMode(IHost host, CliOptions options)
 {
@@ -169,7 +172,12 @@ static int RunListDiscardedMode(IHost host, string email)
     return 0;
 }
 
-static int RunSearchMode(IHost host, CliOptions options)
+static int RunSearchMode(
+    IHost host,
+    CliOptions options,
+    string resumeContent,
+    string? careerStoryContent,
+    string? careerGoalsContent)
 {
     using var scope = host.Services.CreateScope();
     var serviceProvider = scope.ServiceProvider;
@@ -178,15 +186,6 @@ static int RunSearchMode(IHost host, CliOptions options)
     var repository = ServiceProviderServiceExtensions.GetRequiredService<JobRepository>(serviceProvider);
     var loggerFactory = ServiceProviderServiceExtensions.GetRequiredService<ILoggerFactory>(serviceProvider);
     var logger = loggerFactory.CreateLogger<JobEvaluationAgent>();
-
-    var resumeContent = File.ReadAllText(options.Resume!);
-
-    var profileLogger = loggerFactory.CreateLogger<UserProfileResolver>();
-    var profileResolver = new UserProfileResolver(profileLogger);
-    var careerStoryPath = profileResolver.ResolveCareerStoryPath(options.CareerStory);
-    var careerGoalsPath = profileResolver.ResolveCareerGoalsPath(options.CareerGoals);
-    var careerStoryContent = careerStoryPath is null ? null : File.ReadAllText(careerStoryPath);
-    var careerGoalsContent = careerGoalsPath is null ? null : File.ReadAllText(careerGoalsPath);
 
     var agent = new JobEvaluationAgent(
         chatClient,
