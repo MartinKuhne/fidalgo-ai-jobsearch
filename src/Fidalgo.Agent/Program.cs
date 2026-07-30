@@ -14,6 +14,7 @@ using Fidalgo.Agent.Configuration;
 using Fidalgo.Agent.DependencyInjection;
 using Fidalgo.Agent.Tools;
 using Fidalgo.Shared.Tools;
+using Fidalgo.Shared.UserProfile;
 using Fidalgo.Agent.Agents;
 using Fidalgo.Shared.Storage;
 using Fidalgo.Shared.Logging;
@@ -36,6 +37,10 @@ if (args.Length == 0 || args.Contains("--help") || args.Contains("-h"))
     Console.WriteLine("Options:");
     Console.WriteLine("  --Email <email>              [Required] The user's email address");
     Console.WriteLine("  --Resume <path>              [Required] Path to resume text file");
+    Console.WriteLine("  --CareerStory <path>         Optional path to the user's career story (falls back to");
+    Console.WriteLine("                               %APPDATA%\\.config\\Fidalgo\\career-story.md)");
+    Console.WriteLine("  --CareerGoals <path>         Optional path to the user's career goals (falls back to");
+    Console.WriteLine("                               %APPDATA%\\.config\\Fidalgo\\career-goals.md)");
     Console.WriteLine("  --QueryJobs true             Query mode: List saved jobs");
     Console.WriteLine("  --EmployerFilter <name>      Query mode: Filter jobs by employer");
     Console.WriteLine("  --DateFrom <date>            Query mode: Filter jobs from this date");
@@ -176,7 +181,21 @@ static int RunSearchMode(IHost host, CliOptions options)
 
     var resumeContent = File.ReadAllText(options.Resume!);
 
-    var agent = new JobEvaluationAgent(chatClient, repository, options.Email, resumeContent, logger);
+    var profileLogger = loggerFactory.CreateLogger<UserProfileResolver>();
+    var profileResolver = new UserProfileResolver(profileLogger);
+    var careerStoryPath = profileResolver.ResolveCareerStoryPath(options.CareerStory);
+    var careerGoalsPath = profileResolver.ResolveCareerGoalsPath(options.CareerGoals);
+    var careerStoryContent = careerStoryPath is null ? null : File.ReadAllText(careerStoryPath);
+    var careerGoalsContent = careerGoalsPath is null ? null : File.ReadAllText(careerGoalsPath);
+
+    var agent = new JobEvaluationAgent(
+        chatClient,
+        repository,
+        options.Email,
+        resumeContent,
+        logger,
+        careerStoryContent,
+        careerGoalsContent);
 
     var jobs = repository.GetUntriagedAsync(options.Email).Result;
     Console.WriteLine($"Found {jobs.Count} untriaged jobs.");

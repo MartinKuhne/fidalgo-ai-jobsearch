@@ -17,6 +17,8 @@ public class JobEvaluationAgent
     private readonly JobRepository _repository;
     private readonly string _email;
     private readonly string _resume;
+    private readonly string? _careerStory;
+    private readonly string? _careerGoals;
     private readonly ILogger<JobEvaluationAgent> _logger;
 
     public JobEvaluationAgent(
@@ -24,12 +26,16 @@ public class JobEvaluationAgent
         JobRepository repository,
         string email,
         string resume,
-        ILogger<JobEvaluationAgent> logger)
+        ILogger<JobEvaluationAgent> logger,
+        string? careerStory = null,
+        string? careerGoals = null)
     {
         _chatClient = chatClient;
         _repository = repository;
         _email = email;
         _resume = resume;
+        _careerStory = careerStory;
+        _careerGoals = careerGoals;
         _logger = logger;
     }
 
@@ -38,26 +44,7 @@ public class JobEvaluationAgent
         JobEntity job,
         CancellationToken cancellationToken = default)
     {
-        var resume = TruncateResume(_resume);
-        
-        string prompt = $@"You are an AI job evaluation assistant. Your task is to evaluate the following job posting against the user's resume.
-User Email: {_email}
-Resume:
-{resume}
-
-Job Title: {job.Title}
-Employer: {job.Employer}
-Job Description:
-{job.Description}
-
-Instructions:
-1. Extract the required skills, preferred skills, pay, and location details from the job description.
-2. Compare those details against the user's resume.
-3. Determine a match score (0-100).
-4. Determine the Pros (why it's a good fit) and Cons (potential concerns).
-5. Generate Resume Hints (tailoring recommendations).
-6. Provide a Recommendation. Must be EXACTLY ""Apply"", ""Maybe"", or ""Do not apply"".
-7. Use the update_job tool to save your evaluation. DO NOT output formatted text, only call the tool.";
+        var prompt = BuildPrompt(job);
 
         var messages = new List<ChatMessage>
         {
@@ -145,6 +132,42 @@ Instructions:
         return messageCount;
     }
 
+    /// <summary>Builds the LLM system prompt for evaluating a job against the user's resume and optional career story and career goals.</summary>
+    public string BuildPrompt(JobEntity job) =>
+        BuildPrompt(_email, _resume, _careerStory, _careerGoals, job);
+
+    /// <summary>Pure-function variant of the prompt builder. Exposed publicly so tests can exercise the template without instantiating the agent.</summary>
+    public static string BuildPrompt(
+        string email,
+        string resume,
+        string? careerStory,
+        string? careerGoals,
+        JobEntity job)
+    {
+        var truncatedResume = TruncateResume(resume);
+        var careerStorySection = BuildOptionalSection("Career Story", careerStory);
+        var careerGoalsSection = BuildOptionalSection("Career Goals", careerGoals);
+
+        return $@"You are an AI job evaluation assistant. Your task is to evaluate the following job posting against the user's resume.
+User Email: {email}
+Resume:
+{truncatedResume}
+{careerStorySection}{careerGoalsSection}
+Job Title: {job.Title}
+Employer: {job.Employer}
+Job Description:
+{job.Description}
+
+Instructions:
+1. Extract the required skills, preferred skills, pay, and location details from the job description.
+2. Compare those details against the user's resume, career story, and career goals.
+3. Determine a match score (0-100).
+4. Determine the Pros (why it's a good fit) and Cons (potential concerns).
+5. Generate Resume Hints (tailoring recommendations).
+6. Provide a Recommendation. Must be EXACTLY ""Apply"", ""Maybe"", or ""Do not apply"".
+7. Use the update_job tool to save your evaluation. DO NOT output formatted text, only call the tool.";
+    }
+
     private static string TruncateResume(string resume)
     {
         const int maxChars = 60000;
@@ -152,5 +175,16 @@ Instructions:
             return resume;
 
         return resume[..maxChars];
+    }
+
+    /// <summary>Builds a "Label:\\ncontent\\n\\n" section when the content is present, or an empty string when it is null or whitespace.</summary>
+    private static string BuildOptionalSection(string label, string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return string.Empty;
+        }
+
+        return $"{label}:\n{content}\n\n";
     }
 }

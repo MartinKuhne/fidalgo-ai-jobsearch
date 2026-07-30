@@ -12,6 +12,8 @@ public record CliOptions
     public string Email { get; set; } = string.Empty;
 
     public string Resume { get; set; } = string.Empty;
+    public string? CareerStory { get; set; }
+    public string? CareerGoals { get; set; }
     public bool QueryJobs { get; set; }
     public string? EmployerFilter { get; set; }
     public DateTime? DateFrom { get; set; }
