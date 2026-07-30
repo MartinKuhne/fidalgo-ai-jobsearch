@@ -82,6 +82,10 @@ Usage: Fidalgo.Agent [options]
 Options:
   --Email <email>              [Required] The user's email address
   --Resume <path>              [Required] Path to resume text file
+  --CareerStory <path>         Optional path to the user's career story (falls back to
+                               %APPDATA%\.config\Fidalgo\career-story.md)
+  --CareerGoals <path>         Optional path to the user's career goals (falls back to
+                               %APPDATA%\.config\Fidalgo\career-goals.md)
   --QueryJobs true             Query mode: List saved jobs
   --EmployerFilter <name>      Query mode: Filter jobs by employer
   --DateFrom <date>            Query mode: Filter jobs from this date
@@ -102,17 +106,18 @@ dotnet user-secrets set Adzuna:AppKey <your-app-key>
 ```
 
 2. Ensure you have a text or markdown version of your resume available (e.g., `Resume.md`).
-3. Run the ingest tool to search for and download job postings:
+3. *(Optional)* Drop a `career-story.md` and/or `career-goals.md` into `%APPDATA%\.config\Fidalgo\` to give the evaluator extra context about your narrative and short-term goals. You can also point at custom files via `--CareerStory` / `--CareerGoals` on the agent command line.
+4. Run the ingest tool to search for and download job postings:
 ```bash
 dotnet run --project src/Fidalgo.Ingest --Email "you@example.com" --Keywords "software architect" --ZipCode "98033"
 ```
 
-4. Run the agent to analyze the saved jobs against your resume:
+5. Run the agent to analyze the saved jobs against your resume:
 ```bash
 dotnet run --project src/Fidalgo.Agent --Email "you@example.com" --Resume "Resume.md"
 ```
 
-5. To view jobs the agent has saved or processed:
+6. To view jobs the agent has saved or processed:
 ```bash
 dotnet run --project src/Fidalgo.Agent --Email "you@example.com" --QueryJobs true
 ```

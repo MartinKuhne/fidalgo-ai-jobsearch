@@ -70,10 +70,17 @@ Fidalgo JobSearch AI is a long-running, containerized C# application that period
 - Returns structured JSON consumed by the match engine.
 
 ### 4.3 Match Engine (`MatchEngine`)
-- Loads user's resume + optional career narrative.
+- Loads the user's resume plus an optional career story and career goals.
 - Loads extracted employer skills for a given job.
 - Computes overlap percentage → suitability rating (REQ-010, REQ-011).
 - Persists the full job record via EF Core (REQ-011).
+
+In practice the match step is performed by the `JobEvaluationAgent`
+(`Fidalgo.Agent/Agents/JobEvaluationAgent.cs`), which receives the resume
+plus optional career story and career goals content and folds all three
+into the LLM system prompt. File resolution (CLI path or fallback to
+`%APPDATA%\.config\Fidalgo\career-story.md` / `career-goals.md`) lives
+in `Fidalgo.Shared/UserProfile/UserProfileResolver.cs`.
 
 ### 4.4 Email Service (`EmailService`)
 - Triggered daily at 05:00 by a hosted cron timer (REQ-012).
@@ -152,6 +159,7 @@ Fidalgo JobSearch AI is a long-running, containerized C# application that period
 ## 8. Security Considerations
 
 - User resume files and career narratives are stored on the container filesystem, not in the database.
+- The optional career story and career goals live at `%APPDATA%\.config\Fidalgo\career-story.md` and `career-goals.md` by default; users may override either with the `--CareerStory` / `--CareerGoals` CLI flags on `Fidalgo.Agent`. Both are treated as user-controlled input to the LLM.
 - SMTP credentials are injected via environment variables or Docker secrets (no hardcoded passwords).
 - The web UI has no authentication layer by requirement; in production, consider adding a simple API key or cookie-based auth.
 - The local LLM endpoint is on a private network (`192.168.1.21`), not exposed externally.
