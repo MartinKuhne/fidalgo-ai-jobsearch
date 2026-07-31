@@ -24,9 +24,13 @@ public class JobRepository
     /// <returns>The internal ID of the saved or existing job.</returns>
     public virtual async Task<Guid> SaveAsync(JobEntity job, CancellationToken cancellationToken = default)
     {
+        // The pre-check is a performance optimization: it avoids an INSERT attempt
+        // for the common case of duplicates. The (Email, EmployerJobId) unique
+        // index configured in JobDbContext.OnModelCreating is the authoritative
+        // source of truth and protects against the rare race below.
         var existing = await _context.Jobs
             .FirstOrDefaultAsync(j => j.Email == job.Email && j.EmployerJobId == job.EmployerJobId, cancellationToken);
-        
+
         if (existing != null)
         {
             return existing.InternalId;
@@ -34,7 +38,30 @@ public class JobRepository
 
         job.InternalId = Guid.NewGuid();
         await _context.Jobs.AddAsync(job, cancellationToken);
-        await _context.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // Race: another SaveAsync call won the insert between our pre-check
+            // and our SaveChangesAsync. The DB unique constraint caught it.
+            // Detach our pending entity (it's in a failed state), look up the
+            // winner, and return its ID so the caller gets a consistent result.
+            _context.Entry(job).State = EntityState.Detached;
+            var winner = await _context.Jobs.AsNoTracking()
+                .FirstOrDefaultAsync(j => j.Email == job.Email && j.EmployerJobId == job.EmployerJobId, cancellationToken);
+            if (winner is not null)
+            {
+                return winner.InternalId;
+            }
+
+            // No winner found: the constraint violation was for something else.
+            // Re-throw the original exception so the caller sees the real error.
+            throw;
+        }
+
         return job.InternalId;
     }
 

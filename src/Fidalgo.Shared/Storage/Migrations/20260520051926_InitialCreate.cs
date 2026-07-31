@@ -1,10 +1,10 @@
-using System;
+﻿using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 using Fidalgo.Shared.Tools;
-namespace Fidalgo.Ingest.Storage.Migrations
+namespace Fidalgo.Shared.Storage.Migrations
 {
     /// <inheritdoc />
     public partial class InitialCreate : Migration

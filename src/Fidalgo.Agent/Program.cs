@@ -21,8 +21,6 @@ using Fidalgo.Shared.Logging;
 using Fidalgo.Shared.Logging.Configuration;
 using Fidalgo.Shared.Tracing;
 using Fidalgo.Shared.Tracing.Configuration;
-using Fidalgo.Shared.ErrorHandling;
-using Fidalgo.Shared.Retry;
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
@@ -76,8 +74,6 @@ builder.Services.AddSingleton<ITracingConfiguration, TracingConfiguration>();
 builder.Services.AddSingleton<ITraceContextProvider, TraceContextProvider>();
 builder.Services.AddSingleton<ILogEntryWriter, LogEntryWriter>();
 builder.Services.AddSingleton<ISpanFactory, SpanFactory>();
-builder.Services.AddSingleton<IExceptionMapper, ExceptionMapper>();
-builder.Services.AddSingleton<IRetryPolicy, RetryPolicy>();
 builder.Services.AddSingleton<ITraceContextPropagator, TraceContextPropagator>();
 builder.Services.AddSingleton<IOtlpExporter, OtlpExporter>();
 

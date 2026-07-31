@@ -40,7 +40,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<JobRepository>();
 
         // Services
-        services.AddScoped<HtmlSanitizer>();
         services.AddScoped<HtmlStripper>();
 
         // Browser Fetch Tool
