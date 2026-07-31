@@ -69,6 +69,40 @@ These instructions must be followed always if you’re contributing, reviewing, 
 - doc/: documentation
 - One class, stuct, record or interface per file
 
+## Test coverage policy
+
+DTOs, view models, options classes, the EF entity (`JobEntity`), and
+the data-carrier exception types are **exempt from test coverage and
+are not tested directly**. They have no behavior worth testing in
+isolation; their code paths are exercised indirectly through the
+services, tools, and agents that consume them. Testing getters,
+setters, and property assignments is noise.
+
+Specifically exempt:
+
+- `**/Models/**/*.cs` — all view models and DTOs
+  (`AdzunaModels`, `BrowserConfiguration`, `ExceptionDetails`,
+  `FetchRequest`/`FetchResult`, `JobViewModel`, `LogEntry`,
+  `PaginatedResult`, `Span`/`SpanEvent`/`SpanLink`, `TenantEmailInfo`,
+  `TraceContext`).
+- `**/Configuration/**/*.cs` — options classes
+  (`AdzunaConfiguration`).
+- `**/Storage/JobEntity.cs` — the EF entity.
+- `**/ErrorHandling/*Exception.cs` — the validation / not-found /
+  unauthorized / agent-execution exception types.
+
+To run coverage with the exemption applied, pass the runsettings
+file:
+
+```powershell
+dotnet test src/Fidalgo.slnx `
+    --collect:"XPlat Code Coverage" `
+    --settings ./coverlet.runsettings
+```
+
+Without `--settings`, the full code base (including models) is
+covered.
+
 # EARS (Easy Approach to Requirements Syntax) formatted universal non-functional requirements
 
 ## Logging

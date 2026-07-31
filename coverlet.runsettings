@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Coverlet runsettings for the XPlat code coverage data collector.
+
+  Excludes DTOs, view models, options classes, the JobEntity, and the
+  data-carrier exception types from coverage. See AGENTS.md
+  "Test coverage policy" for the rationale.
+
+  Activate with:
+    dotnet test /collect:"XPlat Code Coverage" /settings coverlet.runsettings
+-->
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat code coverage">
+        <Configuration>
+          <ExcludeByFile>
+            **/Models/**/*.cs,
+            **/Configuration/**/*.cs,
+            **/Storage/JobEntity.cs,
+            **/ErrorHandling/*Exception.cs,
+            **/obj/**/*SourceGenerators*/**/*.cs
+          </ExcludeByFile>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>
