@@ -198,6 +198,193 @@ public class JobRepositoryTests : IDisposable
         Assert.Equal(id, result.InternalId);
     }
 
+    [Fact]
+    public async Task GetByIdAsync_ShouldReturnNull_WhenJobMissing()
+    {
+        var result = await _sut.GetByIdAsync(Guid.NewGuid());
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ShouldPersistChanges()
+    {
+        // Arrange
+        var job = CreateValidJob("test@example.com", "Employer 1", "EID-1");
+        var id = await _sut.SaveAsync(job);
+
+        // Act
+        job.InternalId = id;
+        job.Score = 95;
+        job.Recommendation = "Apply";
+        job.Pros = "Great match";
+        await _sut.UpdateAsync(job);
+
+        // Assert
+        var reloaded = await _sut.GetByIdAsync(id);
+        Assert.NotNull(reloaded);
+        Assert.Equal(95, reloaded.Score);
+        Assert.Equal("Apply", reloaded.Recommendation);
+        Assert.Equal("Great match", reloaded.Pros);
+    }
+
+    [Fact]
+    public async Task GetUntriagedAsync_ShouldReturnOnlyJobsWithZeroScore()
+    {
+        // Arrange
+        var email = "test@example.com";
+        var untriaged = CreateValidJob(email, "Employer 1", "EID-1");
+        untriaged.Score = 0;
+        var triaged = CreateValidJob(email, "Employer 2", "EID-2");
+        triaged.Score = 80;
+        await _sut.SaveAsync(untriaged);
+        await _sut.SaveAsync(triaged);
+
+        // Act
+        var results = await _sut.GetUntriagedAsync(email);
+
+        // Assert
+        Assert.Single(results);
+        Assert.Equal("EID-1", results[0].EmployerJobId);
+    }
+
+    [Fact]
+    public async Task GetUntriagedAsync_ShouldExcludeDeletedJobs()
+    {
+        // Arrange
+        var email = "test@example.com";
+        var untriaged = CreateValidJob(email, "Employer 1", "EID-1");
+        untriaged.Score = 0;
+        var untriagedButDeleted = CreateValidJob(email, "Employer 2", "EID-2");
+        untriagedButDeleted.Score = 0;
+        var id1 = await _sut.SaveAsync(untriaged);
+        var id2 = await _sut.SaveAsync(untriagedButDeleted);
+        await _sut.SoftDeleteAsync(id2);
+
+        // Act
+        var results = await _sut.GetUntriagedAsync(email);
+
+        // Assert
+        Assert.Single(results);
+        Assert.Equal(id1, results[0].InternalId);
+    }
+
+    [Fact]
+    public async Task QueryAsync_ShouldFilterByDateRange_WhenBothBoundsProvided()
+    {
+        // Arrange
+        var email = "test@example.com";
+        var inRange = CreateValidJob(email, "E1", "J1");
+        inRange.PostedDate = new DateTime(2026, 5, 15, 0, 0, 0, DateTimeKind.Utc);
+        var before = CreateValidJob(email, "E2", "J2");
+        before.PostedDate = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var after = CreateValidJob(email, "E3", "J3");
+        after.PostedDate = new DateTime(2026, 12, 31, 0, 0, 0, DateTimeKind.Utc);
+        await _sut.SaveAsync(inRange);
+        await _sut.SaveAsync(before);
+        await _sut.SaveAsync(after);
+
+        // Act
+        var results = await _sut.QueryAsync(
+            email,
+            dateFrom: new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc),
+            dateTo: new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        // Assert
+        Assert.Single(results);
+        Assert.Equal("J1", results[0].EmployerJobId);
+    }
+
+    [Fact]
+    public async Task QueryAsync_ShouldFilterByExactEmployerJobId()
+    {
+        // Arrange
+        var email = "test@example.com";
+        await _sut.SaveAsync(CreateValidJob(email, "E1", "J1"));
+        await _sut.SaveAsync(CreateValidJob(email, "E2", "J2"));
+
+        // Act
+        var results = await _sut.QueryAsync(email, employerJobId: "J1");
+
+        // Assert
+        Assert.Single(results);
+        Assert.Equal("J1", results[0].EmployerJobId);
+    }
+
+    [Fact]
+    public async Task QueryAsync_ShouldIncludeDeletedJobs_WhenExcludeDeletedFalse()
+    {
+        // Arrange
+        var email = "test@example.com";
+        var job = CreateValidJob(email, "E1", "J1");
+        var id = await _sut.SaveAsync(job);
+        await _sut.SoftDeleteAsync(id);
+
+        // Act
+        var withDeleted = await _sut.QueryAsync(email, excludeDeleted: false);
+        var withoutDeleted = await _sut.QueryAsync(email, excludeDeleted: true);
+
+        // Assert
+        Assert.Single(withDeleted);
+        Assert.Empty(withoutDeleted);
+    }
+
+    [Fact]
+    public async Task SaveAsync_ShouldReturnExistingId_WhenDuplicateEmailAndJobId()
+    {
+        // Arrange
+        var job1 = CreateValidJob("test@example.com", "E1", "J1");
+        var id1 = await _sut.SaveAsync(job1);
+
+        // Act
+        var job2 = CreateValidJob("test@example.com", "E1", "J1");
+        var id2 = await _sut.SaveAsync(job2);
+
+        // Assert
+        Assert.Equal(id1, id2);
+    }
+
+    [Fact]
+    public async Task ExistsAsync_ShouldReturnFalse_WhenCaseDiffersButJobIdDiffers()
+    {
+        // Arrange
+        var email = "test@example.com";
+        var job = CreateValidJob(email, "E1", "J1");
+        job.SourceWebsite = "TestSite.com";
+        await _sut.SaveAsync(job);
+
+        // Act
+        var exists = await _sut.ExistsAsync(email, "TestSite.com", "J2");
+
+        // Assert
+        Assert.False(exists);
+    }
+
+    [Fact]
+    public async Task QueryAsync_ShouldOrderByPostedDateDescending()
+    {
+        // Arrange
+        var email = "test@example.com";
+        var newest = CreateValidJob(email, "E1", "J1");
+        newest.PostedDate = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var middle = CreateValidJob(email, "E2", "J2");
+        middle.PostedDate = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var oldest = CreateValidJob(email, "E3", "J3");
+        oldest.PostedDate = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        await _sut.SaveAsync(newest);
+        await _sut.SaveAsync(middle);
+        await _sut.SaveAsync(oldest);
+
+        // Act
+        var results = await _sut.QueryAsync(email);
+
+        // Assert
+        Assert.Equal(3, results.Count);
+        Assert.Equal("J1", results[0].EmployerJobId);
+        Assert.Equal("J2", results[1].EmployerJobId);
+        Assert.Equal("J3", results[2].EmployerJobId);
+    }
+
     private JobEntity CreateValidJob(string email, string employer, string employerJobId)
     {
         return new JobEntity

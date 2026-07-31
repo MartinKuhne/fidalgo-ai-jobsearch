@@ -145,4 +145,44 @@ public class JobEvaluationAgentTests
         Assert.Contains("career story", prompt);
         Assert.Contains("career goals", prompt);
     }
+
+    [Fact]
+    public void InstanceBuildPrompt_UsesConstructorArguments()
+    {
+        var job = SampleJob();
+
+        var agent = new JobEvaluationAgent(
+            chatClient: null!,
+            repository: null!,
+            email: "instance@example.com",
+            resume: "instance-resume",
+            logger: null!,
+            careerStory: "instance-story",
+            careerGoals: "instance-goals");
+
+        var prompt = agent.BuildPrompt(job);
+
+        Assert.Contains("instance@example.com", prompt);
+        Assert.Contains("instance-resume", prompt);
+        Assert.Contains("instance-story", prompt);
+        Assert.Contains("instance-goals", prompt);
+    }
+
+    [Fact]
+    public void InstanceBuildPrompt_OmitsNullOptionalSections()
+    {
+        var job = SampleJob();
+
+        var agent = new JobEvaluationAgent(
+            chatClient: null!,
+            repository: null!,
+            email: "u@example.com",
+            resume: "r",
+            logger: null!);
+
+        var prompt = agent.BuildPrompt(job);
+
+        Assert.DoesNotContain("Career Story:", prompt);
+        Assert.DoesNotContain("Career Goals:", prompt);
+    }
 }
