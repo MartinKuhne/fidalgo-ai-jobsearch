@@ -218,7 +218,10 @@ FakesAssemblies/
 # Per-environment configuration
 **/appsettings.Development.json
 
-*Resume*
+*Resume*.md
+*Resume*.pdf
+*Resume*.docx
+*Resume*.txt
 
 **/wwwroot/
 
