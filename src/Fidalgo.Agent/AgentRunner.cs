@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Fidalgo.Agent.Agents;
 using Fidalgo.Agent.Configuration;
 using Fidalgo.Shared.ApplicationPackets;
@@ -19,6 +20,7 @@ namespace Fidalgo.Agent;
 /// </summary>
 public class AgentRunner
 {
+    private static readonly ActivitySource ActivitySource = new("Fidalgo.Agent");
     private readonly JobRepository _repository;
     private readonly GetJobsTool _getJobsTool;
     private readonly IApplicationPacketService _packetService;
@@ -64,6 +66,9 @@ public class AgentRunner
     public async Task<int> RunAsync(CliOptions options, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(options);
+
+        var operationName = Activity.Current is null ? "agent.run" : "agent.dispatch";
+        using var traceScope = FidalgoHostBootstrap.BeginRootTrace(ActivitySource, operationName);
 
         if (options.QueryJobs)
         {

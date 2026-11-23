@@ -54,7 +54,7 @@ public class MdToPdfRendererTests
 
         var bytes = await sut.RenderMarkdownToPdfAsync(
             "# Jane Doe\n- Engineer",
-            new PdfRenderOptions(PdfDocumentKind.Resume, "Acme Resume", "A4"));
+            new PdfRenderOptions(PdfDocumentKind.Resume, "A4"));
 
         Assert.Equal(ValidPdfBytes, bytes);
         Assert.Equal(HttpMethod.Post, capturedMethod);
@@ -71,9 +71,9 @@ public class MdToPdfRendererTests
     [Fact]
     public void PdfCssProvider_ProducesDistinctCssForResumeAndCoverLetter_AndSanitizesPageSize()
     {
-        var resumeCss = PdfCssProvider.GetCss(new PdfRenderOptions(PdfDocumentKind.Resume, "Resume", "Letter"));
-        var coverCss = PdfCssProvider.GetCss(new PdfRenderOptions(PdfDocumentKind.CoverLetter, "Cover", "Letter"));
-        var sanitizedCss = PdfCssProvider.GetCss(new PdfRenderOptions(PdfDocumentKind.Resume, "Resume", "A4; } body { display:none"));
+        var resumeCss = PdfCssProvider.GetCss(new PdfRenderOptions(PdfDocumentKind.Resume, "Letter"));
+        var coverCss = PdfCssProvider.GetCss(new PdfRenderOptions(PdfDocumentKind.CoverLetter, "Letter"));
+        var sanitizedCss = PdfCssProvider.GetCss(new PdfRenderOptions(PdfDocumentKind.Resume, "A4; } body { display:none"));
 
         Assert.NotEqual(resumeCss, coverCss);
         Assert.Contains("Liberation Sans", resumeCss);
@@ -96,7 +96,7 @@ public class MdToPdfRendererTests
         var sut = CreateSut(stub);
         var bytes = await sut.RenderMarkdownToPdfAsync(
             "# Cover Letter",
-            new PdfRenderOptions(PdfDocumentKind.CoverLetter, "Cover"));
+            new PdfRenderOptions(PdfDocumentKind.CoverLetter));
 
         Assert.Equal(ValidPdfBytes, bytes);
         Assert.Equal(3, stub.CallCount);
@@ -111,7 +111,7 @@ public class MdToPdfRendererTests
         var sut = CreateSut(stub);
 
         await Assert.ThrowsAsync<AgentExecutionException>(() =>
-            sut.RenderMarkdownToPdfAsync("# Resume", new PdfRenderOptions(PdfDocumentKind.Resume, "Resume")));
+            sut.RenderMarkdownToPdfAsync("# Resume", new PdfRenderOptions(PdfDocumentKind.Resume)));
 
         Assert.Equal(1, stub.CallCount);
     }
@@ -128,7 +128,7 @@ public class MdToPdfRendererTests
         var sut = CreateSut(stub);
 
         await Assert.ThrowsAsync<AgentExecutionException>(() =>
-            sut.RenderMarkdownToPdfAsync("# Resume", new PdfRenderOptions(PdfDocumentKind.Resume, "Resume")));
+            sut.RenderMarkdownToPdfAsync("# Resume", new PdfRenderOptions(PdfDocumentKind.Resume)));
 
         Assert.Equal(4, stub.CallCount);
     }
@@ -144,7 +144,7 @@ public class MdToPdfRendererTests
         var sut = CreateSut(stub);
 
         await Assert.ThrowsAsync<AgentExecutionException>(() =>
-            sut.RenderMarkdownToPdfAsync("# Resume", new PdfRenderOptions(PdfDocumentKind.Resume, "Resume")));
+            sut.RenderMarkdownToPdfAsync("# Resume", new PdfRenderOptions(PdfDocumentKind.Resume)));
     }
 
     [Fact]
@@ -159,7 +159,7 @@ public class MdToPdfRendererTests
             timeoutOverride: TimeSpan.FromMilliseconds(25));
 
         var ex = await Assert.ThrowsAsync<AgentExecutionException>(() =>
-            sut.RenderMarkdownToPdfAsync("# Resume", new PdfRenderOptions(PdfDocumentKind.Resume, "Resume")));
+            sut.RenderMarkdownToPdfAsync("# Resume", new PdfRenderOptions(PdfDocumentKind.Resume)));
 
         Assert.Contains("timed out", ex.Message, StringComparison.OrdinalIgnoreCase);
     }

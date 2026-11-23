@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using Fidalgo.Shared.ErrorHandling;
@@ -17,6 +18,9 @@ public class FileSystemApplicationPacketStore : IApplicationPacketStore
     {
         WriteIndented = true
     };
+
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> DirectoryLocks =
+        new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
     private readonly ILogger<FileSystemApplicationPacketStore> _logger;
 
@@ -81,51 +85,62 @@ public class FileSystemApplicationPacketStore : IApplicationPacketStore
         cancellationToken.ThrowIfCancellationRequested();
 
         var files = ApplicationPacketPaths.GetPacketFiles(baseOutputDir, job);
-        Directory.CreateDirectory(files.DirectoryPath);
+        var lockKey = Path.TrimEndingDirectorySeparator(Path.GetFullPath(files.DirectoryPath));
+        var directoryLock = DirectoryLocks.GetOrAdd(lockKey, static _ => new SemaphoreSlim(1, 1));
 
-        var generatedAtUtc = DateTime.UtcNow;
-        var manifestJson = JsonSerializer.Serialize(
-            new Dictionary<string, object?>
-            {
-                ["jobId"] = job.InternalId,
-                ["generatedAtUtc"] = generatedAtUtc,
-                ["model"] = request.ModelName,
-                ["forceRegenerated"] = request.ForceRegenerated
-            },
-            JsonOptions);
-
-        var stagedPairs = new List<(string StagingPath, string TargetPath)>(6);
+        await directoryLock.WaitAsync(cancellationToken);
         try
         {
-            stagedPairs.Add((await StageBytesAsync(files.ResumePdfPath, request.ResumePdfBytes, cancellationToken), files.ResumePdfPath));
-            stagedPairs.Add((await StageBytesAsync(files.CoverLetterPdfPath, request.CoverLetterPdfBytes, cancellationToken), files.CoverLetterPdfPath));
-            stagedPairs.Add((await StageTextAsync(files.JobPostingPath, request.JobPostingMarkdown, cancellationToken), files.JobPostingPath));
-            stagedPairs.Add((await StageTextAsync(files.ResumeMarkdownPath, request.ResumeMarkdown, cancellationToken), files.ResumeMarkdownPath));
-            stagedPairs.Add((await StageTextAsync(files.CoverLetterMarkdownPath, request.CoverLetterMarkdown, cancellationToken), files.CoverLetterMarkdownPath));
-            stagedPairs.Add((await StageTextAsync(files.ManifestPath, manifestJson, cancellationToken), files.ManifestPath));
+            Directory.CreateDirectory(files.DirectoryPath);
 
-            foreach (var (stagingPath, targetPath) in stagedPairs)
+            var generatedAtUtc = DateTime.UtcNow;
+            var manifestJson = JsonSerializer.Serialize(
+                new Dictionary<string, object?>
+                {
+                    ["jobId"] = job.InternalId,
+                    ["generatedAtUtc"] = generatedAtUtc,
+                    ["model"] = request.ModelName,
+                    ["forceRegenerated"] = request.ForceRegenerated
+                },
+                JsonOptions);
+
+            var stagedPairs = new List<(string StagingPath, string TargetPath)>(6);
+            try
             {
-                File.Move(stagingPath, targetPath, overwrite: true);
+                stagedPairs.Add((await StageBytesAsync(files.ResumePdfPath, request.ResumePdfBytes, cancellationToken), files.ResumePdfPath));
+                stagedPairs.Add((await StageBytesAsync(files.CoverLetterPdfPath, request.CoverLetterPdfBytes, cancellationToken), files.CoverLetterPdfPath));
+                stagedPairs.Add((await StageTextAsync(files.JobPostingPath, request.JobPostingMarkdown, cancellationToken), files.JobPostingPath));
+                stagedPairs.Add((await StageTextAsync(files.ResumeMarkdownPath, request.ResumeMarkdown, cancellationToken), files.ResumeMarkdownPath));
+                stagedPairs.Add((await StageTextAsync(files.CoverLetterMarkdownPath, request.CoverLetterMarkdown, cancellationToken), files.CoverLetterMarkdownPath));
+                stagedPairs.Add((await StageTextAsync(files.ManifestPath, manifestJson, cancellationToken), files.ManifestPath));
+
+                foreach (var (stagingPath, targetPath) in stagedPairs)
+                {
+                    MoveReplacing(stagingPath, targetPath);
+                }
+
+                _logger.LogInformation(
+                    "Saved application packet for job {JobId} to {FolderName} (ResumePdfBytes={ResumePdfBytes}, CoverLetterPdfBytes={CoverLetterPdfBytes}).",
+                    job.InternalId,
+                    files.FolderName,
+                    request.ResumePdfBytes.Length,
+                    request.CoverLetterPdfBytes.Length);
+
+                return files;
             }
+            catch
+            {
+                foreach (var (stagingPath, _) in stagedPairs)
+                {
+                    TryDeleteFile(stagingPath);
+                }
 
-            _logger.LogInformation(
-                "Saved application packet for job {JobId} to {FolderName} (ResumePdfBytes={ResumePdfBytes}, CoverLetterPdfBytes={CoverLetterPdfBytes}).",
-                job.InternalId,
-                files.FolderName,
-                request.ResumePdfBytes.Length,
-                request.CoverLetterPdfBytes.Length);
-
-            return files;
+                throw;
+            }
         }
-        catch
+        finally
         {
-            foreach (var (stagingPath, _) in stagedPairs)
-            {
-                TryDeleteFile(stagingPath);
-            }
-
-            throw;
+            directoryLock.Release();
         }
     }
 
@@ -175,7 +190,7 @@ public class FileSystemApplicationPacketStore : IApplicationPacketStore
             targetPath,
             FileMode.Open,
             FileAccess.Read,
-            FileShare.Read,
+            FileShare.Read | FileShare.Delete,
             bufferSize: 4096,
             useAsync: true);
 
@@ -231,6 +246,27 @@ public class FileSystemApplicationPacketStore : IApplicationPacketStore
         var stagingPath = Path.Combine(dir, $".{Path.GetFileName(targetPath)}.tmp-{Guid.NewGuid():N}");
         await File.WriteAllTextAsync(stagingPath, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), cancellationToken);
         return stagingPath;
+    }
+
+    private static void MoveReplacing(string stagingPath, string targetPath)
+    {
+        try
+        {
+            File.Move(stagingPath, targetPath, overwrite: true);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException && File.Exists(targetPath))
+        {
+            // On Windows, MoveFileEx(..., overwrite: true) fails with UnauthorizedAccessException when
+            // targetPath is open by a reader even with FileShare.Delete. Renaming the open file out of
+            // the way succeeds with FileShare.Delete so existing readers finish on their open handle.
+            var displacedPath = Path.Combine(
+                Path.GetDirectoryName(targetPath)!,
+                $".{Path.GetFileName(targetPath)}.old-{Guid.NewGuid():N}");
+
+            File.Move(targetPath, displacedPath, overwrite: true);
+            TryDeleteFile(displacedPath);
+            File.Move(stagingPath, targetPath, overwrite: true);
+        }
     }
 
     private static void TryDeleteFile(string path)

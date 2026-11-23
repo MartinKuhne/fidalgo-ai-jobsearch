@@ -83,7 +83,8 @@ public class IngestStartupTests : IDisposable
             """);
 
         var capturedUrls = new List<string>();
-        var stubHttpClient = new HttpClient(new EmptyAdzunaHandler(capturedUrls));
+        var capturedTraceParents = new List<string?>();
+        var stubHttpClient = new HttpClient(new EmptyAdzunaHandler(capturedUrls, capturedTraceParents));
         var output = new StringWriter();
         var error = new StringWriter();
 
@@ -110,7 +111,33 @@ public class IngestStartupTests : IDisposable
         Assert.NotEmpty(logFiles);
         var logContent = await File.ReadAllTextAsync(logFiles[0]);
         Assert.Contains("Fidalgo.Ingest starting up.", logContent);
+        Assert.Contains("CorrelationId", logContent);
         Assert.Contains("Z\"", logContent);
+    }
+
+    [Fact]
+    public void BuildHost_CliOverridesUserProfileConfig()
+    {
+        var tempDir = CreateTempDir();
+        var configPath = Path.Combine(tempDir, "config.json");
+        File.WriteAllText(configPath, """
+        {
+          "Email": "config@example.com",
+          "ZipCode": "98101",
+          "JobSearchKeywords": ["from config"]
+        }
+        """);
+
+        using var host = Program.BuildHost(
+            ["--Email", "cli@example.com", "--Keywords", "from cli"],
+            useUserProfileConfig: false,
+            userProfileConfigPath: configPath,
+            logFilePath: Path.Combine(tempDir, "logs", "log-.json"));
+
+        var options = host.Services.GetRequiredService<IOptions<CliOptions>>().Value;
+        Assert.Equal("cli@example.com", options.Email);
+        Assert.Equal("from cli", options.Keywords);
+        Assert.Equal("98101", options.ZipCode);
     }
 
     [Fact]
@@ -162,11 +189,13 @@ public class IngestStartupTests : IDisposable
         Assert.True(options.QueryJobs);
     }
 
-    private sealed class EmptyAdzunaHandler(List<string> capturedUrls) : HttpMessageHandler
+    private sealed class EmptyAdzunaHandler(List<string> capturedUrls, List<string?> capturedTraceParents) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             capturedUrls.Add(request.RequestUri?.ToString() ?? string.Empty);
+            capturedTraceParents.Add(
+                request.Headers.TryGetValues("traceparent", out var values) ? values.FirstOrDefault() : null);
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent("""{"count":0,"results":[]}""")

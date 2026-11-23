@@ -17,8 +17,8 @@ public class TraceContextProvider : ITraceContextProvider
         return _currentContext.Value;
     }
 
-    /// <summary>Sets the current trace context for the async flow.</summary>
-    public void SetCurrentContext(TraceContext context)
+    /// <summary>Sets the current trace context for the async flow, or clears it when <c>null</c>.</summary>
+    public void SetCurrentContext(TraceContext? context)
     {
         _currentContext.Value = context;
     }

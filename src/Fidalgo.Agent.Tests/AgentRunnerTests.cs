@@ -567,6 +567,44 @@ public class AgentRunnerTests : IDisposable
 
         var logFiles = Directory.GetFiles(Path.Combine(tempDir, "logs"), "log-*.json");
         Assert.NotEmpty(logFiles);
+        var logContent = await File.ReadAllTextAsync(logFiles[0]);
+        Assert.Contains("CorrelationId", logContent);
+    }
+
+    [Fact]
+    public void Program_BuildHost_CliAndEnvOverrideUserProfileConfig()
+    {
+        var tempDir = CreateTempDir();
+        var configPath = Path.Combine(tempDir, "config.json");
+        File.WriteAllText(configPath, """
+        {
+          "Email": "from-config@example.com",
+          "ApplicationPacket": {
+            "RecommendationFilter": "Maybe"
+          }
+        }
+        """);
+
+        var previousEnv = Environment.GetEnvironmentVariable("ApplicationPacket__RecommendationFilter");
+        Environment.SetEnvironmentVariable("ApplicationPacket__RecommendationFilter", "Apply");
+        try
+        {
+            using var host = Program.BuildHost(
+                ["--Email", "from-cli@example.com"],
+                useUserProfileConfig: false,
+                userProfileConfigPath: configPath,
+                logFilePath: Path.Combine(tempDir, "logs", "log-.json"));
+
+            var cliOptions = host.Services.GetRequiredService<IOptions<CliOptions>>().Value;
+            var packetOptions = host.Services.GetRequiredService<IOptions<ApplicationPacketOptions>>().Value;
+
+            Assert.Equal("from-cli@example.com", cliOptions.Email);
+            Assert.Equal("Apply", packetOptions.RecommendationFilter);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ApplicationPacket__RecommendationFilter", previousEnv);
+        }
     }
 
     [Fact]

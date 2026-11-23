@@ -55,34 +55,9 @@ public static class ResumeTailoringPromptBuilder
         ArgumentException.ThrowIfNullOrWhiteSpace(baseResumeMarkdown);
 
         var sb = new StringBuilder();
-        sb.AppendLine("<candidate_resume>");
-        sb.AppendLine(baseResumeMarkdown.Trim());
-        sb.AppendLine("</candidate_resume>");
-
-        if (!string.IsNullOrWhiteSpace(careerStoryMarkdown))
-        {
-            sb.AppendLine();
-            sb.AppendLine("<career_story>");
-            sb.AppendLine(careerStoryMarkdown.Trim());
-            sb.AppendLine("</career_story>");
-        }
-
-        sb.AppendLine();
-        sb.AppendLine("<job_posting>");
-        sb.Append("Employer: ").AppendLine(string.IsNullOrWhiteSpace(employer) ? "Unknown Employer" : employer.Trim());
-        sb.Append("Title: ").AppendLine(string.IsNullOrWhiteSpace(jobTitle) ? "Untitled Role" : jobTitle.Trim());
-
-        if (!string.IsNullOrWhiteSpace(resumeHints))
-        {
-            sb.AppendLine();
-            sb.AppendLine("Evaluation Resume Hints:");
-            sb.AppendLine(resumeHints.Trim());
-        }
-
-        sb.AppendLine();
-        sb.AppendLine("Description:");
-        sb.AppendLine(string.IsNullOrWhiteSpace(jobDescription) ? "No description provided." : jobDescription.Trim());
-        sb.AppendLine("</job_posting>");
+        PromptSectionWriter.AppendSectionIfPresent(sb, "candidate_resume", baseResumeMarkdown, leadingBlankLine: false);
+        PromptSectionWriter.AppendSectionIfPresent(sb, "career_story", careerStoryMarkdown);
+        PromptSectionWriter.AppendJobPostingSection(sb, employer, jobTitle, jobPros: null, resumeHints, jobDescription);
         sb.AppendLine();
         sb.Append("Generate the tailored resume in clean Markdown now.");
 

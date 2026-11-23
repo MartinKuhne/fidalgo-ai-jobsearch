@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Fidalgo.Agent;
 using Fidalgo.Agent.Configuration;
 using Fidalgo.Agent.DependencyInjection;
@@ -5,21 +6,13 @@ using Fidalgo.Shared.ApplicationPackets;
 using Fidalgo.Shared.Configuration;
 using Fidalgo.Shared.Llm;
 using Fidalgo.Shared.Logging;
-using Fidalgo.Shared.Logging.Configuration;
 using Fidalgo.Shared.Storage;
-using Fidalgo.Shared.Tracing;
-using Fidalgo.Shared.Tracing.Configuration;
 using Fidalgo.Shared.UserProfile;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Serilog;
-using Serilog.Events;
-using Serilog.Formatting.Compact;
 
 return await Program.ExecuteAsync(args);
 
@@ -28,6 +21,8 @@ return await Program.ExecuteAsync(args);
 /// </summary>
 public partial class Program
 {
+    private static readonly ActivitySource ActivitySource = new("Fidalgo.Agent");
+
     internal static readonly HashSet<string> BooleanFlags = new(StringComparer.OrdinalIgnoreCase)
     {
         "--QueryJobs",
@@ -54,7 +49,7 @@ public partial class Program
         var outWriter = output ?? Console.Out;
         var errWriter = error ?? Console.Error;
 
-        if (HasHelpFlag(args))
+        if (FidalgoHostBootstrap.HasHelpFlag(args))
         {
             PrintUsage(outWriter);
             return 0;
@@ -72,6 +67,11 @@ public partial class Program
         try
         {
             await host.StartAsync(cancellationToken);
+
+            using var rootTrace = FidalgoHostBootstrap.BeginRootTrace(
+                ActivitySource,
+                "agent.run",
+                host.Services.GetService<ITraceContextProvider>());
 
             var logger = host.Services.GetRequiredService<ILogger<Program>>();
             logger.LogInformation("Fidalgo.Agent starting up.");
@@ -100,7 +100,7 @@ public partial class Program
             await WriteValidationErrorsAsync([ex], errWriter);
             return 1;
         }
-        catch (AggregateException ex) when (TryGetValidationExceptions(ex, out var validationExceptions))
+        catch (AggregateException ex) when (FidalgoHostBootstrap.TryGetValidationExceptions(ex, out var validationExceptions))
         {
             await WriteValidationErrorsAsync(validationExceptions, errWriter);
             return 1;
@@ -135,29 +135,32 @@ public partial class Program
         var builder = Host.CreateApplicationBuilder(normalizedArgs);
 
         var baseDir = AppContext.BaseDirectory;
-        builder.Configuration.AddJsonFile(Path.Combine(baseDir, "appsettings.json"), optional: false, reloadOnChange: true);
-        builder.Configuration.AddJsonFile(Path.Combine(baseDir, "appsettings.Development.json"), optional: true, reloadOnChange: true);
+        FidalgoHostBootstrap.InsertSourceBeforeEnvAndCli(builder.Configuration, cfg =>
+            cfg.AddJsonFile(Path.Combine(baseDir, "appsettings.json"), optional: false, reloadOnChange: true));
+        FidalgoHostBootstrap.InsertSourceBeforeEnvAndCli(builder.Configuration, cfg =>
+            cfg.AddJsonFile(Path.Combine(baseDir, "appsettings.Development.json"), optional: true, reloadOnChange: true));
 
-        var loadUserProfile = useUserProfileConfig ?? ShouldLoadUserProfileConfig(builder.Configuration);
+        var loadUserProfile = useUserProfileConfig ?? FidalgoHostBootstrap.ShouldLoadUserProfileConfig(builder.Configuration);
         if (loadUserProfile)
         {
-            builder.Configuration.AddUserProfileConfig();
+            FidalgoHostBootstrap.InsertUserProfileConfigBeforeEnvAndCli(builder.Configuration);
         }
         else if (!string.IsNullOrWhiteSpace(userProfileConfigPath))
         {
-            builder.Configuration.AddJsonFile(userProfileConfigPath, optional: true, reloadOnChange: false);
+            FidalgoHostBootstrap.InsertUserProfileConfigBeforeEnvAndCli(builder.Configuration, userProfileConfigPath);
         }
 
         if (builder.Environment.IsDevelopment())
         {
-            builder.Configuration.AddUserSecrets<Program>(optional: true);
+            FidalgoHostBootstrap.InsertSourceBeforeEnvAndCli(builder.Configuration, cfg =>
+                cfg.AddUserSecrets<Program>(optional: true));
         }
 
         configureConfiguration?.Invoke(builder.Configuration);
         builder.Configuration.AddCommandLine(normalizedArgs);
 
         builder.Services.AddCliOptions(builder.Configuration);
-        builder.Services.AddAgentServices(builder.Configuration.GetSection("DatabasePath")?.Get<string>());
+        builder.Services.AddAgentServices(FidalgoHostBootstrap.ResolveDatabasePath(builder.Configuration));
         builder.Services.AddFidalgoLlmClient(builder.Configuration);
         builder.Services.AddApplicationPacketServices(builder.Configuration);
 
@@ -166,43 +169,13 @@ public partial class Program
             builder.Services.AddSingleton(output);
         }
 
-        builder.Services.AddSingleton<ILoggingConfiguration, LoggingConfiguration>();
-        builder.Services.AddSingleton<ITracingConfiguration, TracingConfiguration>();
-        builder.Services.TryAddSingleton<ITraceContextProvider, TraceContextProvider>();
-        builder.Services.AddSingleton<ILogEntryWriter, LogEntryWriter>();
-        builder.Services.AddSingleton<ISpanFactory, SpanFactory>();
-        builder.Services.AddSingleton<ITraceContextPropagator, TraceContextPropagator>();
-        builder.Services.AddSingleton<IOtlpExporter, OtlpExporter>();
-
-        var effectiveLogPath = logFilePath ?? GetDefaultLogFilePath();
-        var logDirectory = Path.GetDirectoryName(effectiveLogPath);
-        if (!string.IsNullOrWhiteSpace(logDirectory))
-        {
-            Directory.CreateDirectory(logDirectory);
-        }
-
-        builder.Logging.ClearProviders();
-        builder.Services.AddSerilog((_, cfg) => cfg
-            .MinimumLevel.Information()
-            .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Warning)
-            .Enrich.FromLogContext()
-            .WriteTo.Console()
-            .WriteTo.File(
-                formatter: new CompactJsonFormatter(),
-                path: effectiveLogPath,
-                rollingInterval: RollingInterval.Day,
-                retainedFileCountLimit: 7,
-                shared: true));
+        builder.Services.AddFidalgoTelemetry();
+        FidalgoHostBootstrap.ConfigureFidalgoSerilog(builder.Services, builder.Logging, logFilePath);
 
         configureServices?.Invoke(builder.Services);
 
         return builder.Build();
     }
-
-    internal static bool HasHelpFlag(string[] args) =>
-        args.Any(a =>
-            string.Equals(a, "--help", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(a, "-h", StringComparison.OrdinalIgnoreCase));
 
     internal static void PrintUsage(TextWriter writer)
     {
@@ -236,15 +209,6 @@ public partial class Program
         writer.WriteLine("  --help, -h                      Show this help message");
     }
 
-    private static bool TryGetValidationExceptions(
-        AggregateException aggregateException,
-        out List<OptionsValidationException> validationExceptions)
-    {
-        var flattened = aggregateException.Flatten().InnerExceptions;
-        validationExceptions = flattened.OfType<OptionsValidationException>().ToList();
-        return validationExceptions.Count > 0 && validationExceptions.Count == flattened.Count;
-    }
-
     private static async Task WriteValidationErrorsAsync(
         IEnumerable<OptionsValidationException> exceptions,
         TextWriter errWriter)
@@ -260,26 +224,5 @@ public partial class Program
             $"Configure defaults in {UserProfileConfig.GetDefaultConfigPath()} (e.g. \"Email\") or pass --Email <email>.");
         await errWriter.WriteLineAsync();
         PrintUsage(errWriter);
-    }
-
-    private static bool ShouldLoadUserProfileConfig(IConfiguration configuration)
-    {
-        if (string.Equals(configuration["UseUserProfileConfig"], "false", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        if (string.Equals(Environment.GetEnvironmentVariable("FIDALGO_DISABLE_USER_PROFILE_CONFIG"), "true", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        return true;
-    }
-
-    private static string GetDefaultLogFilePath()
-    {
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        return Path.Combine(appData, "fidalgo", "logs", "log-.json");
     }
 }

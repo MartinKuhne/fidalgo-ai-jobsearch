@@ -150,8 +150,6 @@ public class ApplicationPacketService : IApplicationPacketService
         var pageSize = string.IsNullOrWhiteSpace(_packetOptions.Value.ResumePageSize)
             ? "Letter"
             : _packetOptions.Value.ResumePageSize;
-        var roleLabel = string.IsNullOrWhiteSpace(job.Title) ? "Role" : job.Title;
-        var employerLabel = string.IsNullOrWhiteSpace(job.Employer) ? "Employer" : job.Employer;
 
         byte[] resumePdfBytes;
         byte[] coverLetterPdfBytes;
@@ -159,12 +157,12 @@ public class ApplicationPacketService : IApplicationPacketService
         {
             resumePdfBytes = await _pdfRenderer.RenderMarkdownToPdfAsync(
                 resumeMarkdown,
-                new PdfRenderOptions(PdfDocumentKind.Resume, $"{employerLabel} - {roleLabel} Resume", pageSize),
+                new PdfRenderOptions(PdfDocumentKind.Resume, pageSize),
                 cancellationToken);
 
             coverLetterPdfBytes = await _pdfRenderer.RenderMarkdownToPdfAsync(
                 coverLetterMarkdown,
-                new PdfRenderOptions(PdfDocumentKind.CoverLetter, $"{employerLabel} - {roleLabel} Cover Letter", pageSize),
+                new PdfRenderOptions(PdfDocumentKind.CoverLetter, pageSize),
                 cancellationToken);
         }
 
