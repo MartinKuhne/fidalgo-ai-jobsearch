@@ -56,21 +56,21 @@ This specification defines the **Application Packet Extension**: a cohesive, tes
 
 Per `AGENTS.md` ("Avoid libraries without open source license"), candidate Markdown-to-PDF pipelines were evaluated strictly for OSI-approved licensing, typography/ATS quality, single-file host compatibility, and testability.
 
-| Option | Packages & Licenses (OSI?) | ATS / Vector Text & Layout Quality | Operational Footprint | Verdict |
+| Option | Stack & License (OSI?) | ATS / Vector Text & Layout Quality | Operational Footprint | Verdict |
 |---|---|---|---|---|
 | **QuestPDF** (currently listed in `architecture-summary.md`) | `QuestPDF` — Source-available Community License (commercial restriction > $1M revenue). **Not OSI-approved.** | High | Native SkiaSharp binaries | **Rejected** (violates `AGENTS.md` license rule) |
 | **Client-side `html2pdf.js`** (currently in `Fidalgo.Frontend`) | `html2pdf.js` (MIT) / `jspdf` (MIT) / `html2canvas` (MIT) | Poor — renders DOM to JPEG canvas images (non-selectable text, brittle page breaks) | Browser-only; cannot run in `Fidalgo.Agent` batch CLI | **Rejected** for packet generation |
-| **Option A: `Markdig` + HTML/CSS + Playwright Chromium `Page.PdfAsync`** | `Markdig` (**BSD-2-Clause**, OSI) + `Microsoft.Playwright` 1.59.0 (**Apache-2.0**, OSI, **already referenced** in `Fidalgo.Shared.csproj`) | **Excellent** — real vector text, CSS `@page` Letter margins, `break-inside: avoid`, clean typography, zero custom AST layout code | Requires Playwright Chromium installed (`playwright install chromium`); single lazy-reused `IBrowser` keeps per-PDF render ~150–250ms after warm-up | **Recommended Primary (`PlaywrightPdfRenderer`)** |
-| **Option B: `Markdig` + `MigraDocCore` / `PdfSharpCore`** | `Markdig` (**BSD-2-Clause**, OSI) + `MigraDocCore.DocumentObjectModel` / `PdfSharpCore` (**MIT**, OSI) | Moderate — requires custom Markdown-AST-to-MigraDoc visitor and manual font embedding for cross-OS styling | Zero browser binary; ~30ms per PDF; pure managed .NET | **Viable Fallback (`MigraDocPdfRenderer` behind `IPdfRenderer`)** |
+| **`Markdig` + `MigraDocCore` / `PdfSharpCore`** | `Markdig` (**BSD-2-Clause**, OSI) + `MigraDocCore` / `PdfSharpCore` (**MIT**, OSI) | Moderate — requires custom Markdown-AST-to-MigraDoc visitor and manual font embedding | Pure managed .NET; zero sidecar | **Viable Fallback (`MigraDocPdfRenderer` behind `IPdfRenderer`)** |
+| **`Markdig` + Playwright Chromium `Page.PdfAsync`** | `Markdig` (**BSD-2-Clause**, OSI) + `Microsoft.Playwright` (**Apache-2.0**, OSI) | High | Requires installing Chromium binary (`playwright install chromium`) and managing `IBrowser` lifecycle | **Superseded** by `spawnia/md-to-pdf` HTTP API |
+| **Selected: `spawnia/md-to-pdf` HTTP API (`weasyprint`)** | `spawnia/md-to-pdf` (**MIT**, OSI) + `WeasyPrint` (**BSD-3-Clause**, OSI) over standard `HttpClient` (**zero new NuGet packages**) | **Excellent** — real vector text, CSS `@page` Letter margins, clean typography via WeasyPrint | Dedicated local/container HTTP service (`http://localhost:8000`); ~50–150ms per PDF; zero Chromium install in .NET host | **Selected Primary (`MdToPdfRenderer`)** |
 
 **Decision & Justification:**
-Adopt **Option A (`Markdig` [BSD-2-Clause] + HTML/CSS print template + `Microsoft.Playwright` Chromium `Page.PdfAsync` [Apache-2.0])** behind an `IPdfRenderer` abstraction in `Fidalgo.Shared`:
+Adopt **`spawnia/md-to-pdf` HTTP API** (`POST` form-urlencoded `markdown`, `css`, `engine=weasyprint`) behind `IPdfRenderer` (`MdToPdfRenderer`) in `Fidalgo.Shared`:
 
-1. **Minimal new dependency surface:** `Microsoft.Playwright` 1.59.0 is already referenced in `Fidalgo.Shared.csproj`, `Fidalgo.Agent.csproj`, and `Fidalgo.Ingest.csproj`. Only `Markdig` (pure managed `.NET`, BSD-2-Clause) is added.
-2. **ATS & print fidelity:** Chromium's PDF engine outputs true selectable text, crisp vector fonts, hyperlinked contact items, and predictable CSS `@page` pagination without writing/maintaining hundreds of lines of custom Markdown-AST layout code.
-3. **Browser engine note (`Firefox` vs `Chromium`):** `BrowserFetchTool` launches `playwright.Firefox` for job scraping, whereas Playwright's `Page.PdfAsync` is **only supported on Chromium**. `PlaywrightPdfRenderer` therefore explicitly launches `playwright.Chromium` and documents `playwright.ps1 install chromium` in deployment/developer setup.
-4. **Performance & lifecycle:** `PlaywrightPdfRenderer` implements `IAsyncDisposable` and lazily initializes a single thread-safe `IBrowser` instance (`SemaphoreSlim`) shared across batch or web-request renders, opening/closing only a lightweight `IPage` per document.
-5. **Reversibility:** Because all callers depend solely on `IPdfRenderer`, a pure-managed `MigraDocCore` (MIT) renderer can be swapped in via DI for minimal container deployments without touching `ApplicationPacketService`, `Fidalgo.Agent`, or `Fidalgo.Host`.
+1. **Zero new NuGet packages & single-file host friendly:** Uses `System.Net.Http.HttpClient` with existing `TracingHttpMessageHandler` and `Polly` (no `Markdig` dependency and no Chromium browser install or `IBrowser` process management inside `Fidalgo.Host` or `Fidalgo.Agent`).
+2. **OSI-approved stack & ATS print fidelity:** `spawnia/md-to-pdf` (MIT) + `WeasyPrint` (BSD-3-Clause) produce clean, searchable, ATS-parseable vector PDFs styled by server-owned `@page` CSS (`PdfCssProvider`).
+3. **Traceability & resilience:** `MdToPdfRenderer` inherits W3C Trace Context propagation (`TracingHttpMessageHandler`), `Activity` child spans (`pdf.render`), configurable `PdfTimeoutSeconds`, and `Polly` exponential-backoff retries on transient `5xx`/`408`/`429`/network errors.
+4. **Reversibility:** All callers depend solely on `IPdfRenderer`, so an in-process renderer (e.g., `MigraDocCore` [MIT]) remains a drop-in DI replacement if an offline/sidecar-less deployment is ever needed.
 
 ### 3.2 Per-Job Directory Layout & Naming
 
@@ -129,7 +129,10 @@ Adopt **Option A (`Markdig` [BSD-2-Clause] + HTML/CSS print template + `Microsof
          "AutoGenerateForApply": false,
          "RecommendationFilter": "Apply",
          "ResumePageSize": "Letter",
-         "LlmTimeoutSeconds": 120
+         "LlmTimeoutSeconds": 120,
+         "MdToPdfEndpoint": "http://localhost:8000",
+         "MdToPdfEngine": "weasyprint",
+         "PdfTimeoutSeconds": 60
        }
      }
      ```
@@ -215,14 +218,16 @@ Following `AGENTS.md` ("One class, struct, record or interface per file") and `c
     ```
 - **`PdfDocumentKind`** (`Models/PdfDocumentKind.cs`) — Enum: `Resume`, `CoverLetter`.
 - **`PdfRenderOptions`** (`Models/PdfRenderOptions.cs`) — Immutable record: `PdfDocumentKind Kind`, `string DocumentTitle`, `string PageSize = "Letter"`.
-- **`PdfHtmlTemplateProvider`** (`Pdf/PdfHtmlTemplateProvider.cs`) — Dedicated pure helper wrapping converted HTML in an HTML5 + CSS `@page` print document for `Resume` vs `CoverLetter`.
-- **`PlaywrightPdfRenderer`** (`Pdf/PlaywrightPdfRenderer.cs`, implements `IPdfRenderer, IAsyncDisposable`)
-  - Uses `Markdig.Markdown.ToHtml(markdown, SafePipeline)` where `SafePipeline` enables `UseAdvancedExtensions()` and **`DisableHtml()`** (prevents raw HTML/script/SSRF injection).
-  - Lazily launches a singleton Playwright **Chromium** browser (`SemaphoreSlim` guarded), opens a fresh `IBrowserContext`/`IPage`, attaches `page.RouteAsync("**/*", route => route.AbortAsync())` so no external network/file loads occur during `SetContentAsync`, calls `page.PdfAsync(new PagePdfOptions { Format = options.PageSize, PrintBackground = true, Margin = ... })`, and closes context/page in `finally`.
+- **`PdfCssProvider`** (`Pdf/PdfCssProvider.cs`) — Pure static helper returning clean, server-owned `@page` / typography CSS tailored for `PdfDocumentKind.Resume` vs `PdfDocumentKind.CoverLetter` (incorporating `PageSize`).
+- **`MdToPdfRenderer`** (`Pdf/MdToPdfRenderer.cs`, implements `IPdfRenderer`)
+  - Uses injected `HttpClient` (configured with `TracingHttpMessageHandler` for W3C Trace Context propagation per `NFR-101`/`NFR-105`), `IOptions<ApplicationPacketOptions>`, and `ILogger<MdToPdfRenderer>`.
+  - Sends `POST` to `options.MdToPdfEndpoint` with `FormUrlEncodedContent` containing `markdown`, `css` (from `PdfCssProvider`), and `engine` (`options.MdToPdfEngine`, default `"weasyprint"`).
+  - Applies linked timeout `CancellationTokenSource` (`PdfTimeoutSeconds`, default `60`) and `Polly` exponential-backoff retry on transient failures (`5xx`, `408`, `429`, `HttpRequestException`).
+  - Validates non-empty PDF output starting with the `%PDF` magic header; throws `AgentExecutionException` on HTTP failure, timeout, or invalid/empty response; emits `Activity` child span (`pdf.render`).
 
 #### Namespace `Fidalgo.Shared.ApplicationPackets`
 - **`ApplicationPacketOptions`** (`Configuration/ApplicationPacketOptions.cs`)
-  - Options class bound to `"ApplicationPacket"` section: `ProfileDirectory` (`string?`), `OutputDirectory` (`string?`), `AutoGenerateForApply` (`bool`), `RecommendationFilter` (`string = "Apply"`), `ResumePageSize` (`string = "Letter"`), `LlmTimeoutSeconds` (`int = 120`).
+  - Options class bound to `"ApplicationPacket"` section: `ProfileDirectory` (`string?`), `OutputDirectory` (`string?`), `AutoGenerateForApply` (`bool`), `RecommendationFilter` (`string = "Apply"`), `ResumePageSize` (`string = "Letter"`), `LlmTimeoutSeconds` (`int = 120`), `MdToPdfEndpoint` (`string = "http://localhost:8000"`), `MdToPdfEngine` (`string = "weasyprint"`), `PdfTimeoutSeconds` (`int = 60`).
 - **`ApplicationPacketPaths`** (`ApplicationPackets/ApplicationPacketPaths.cs`)
   - Pure helper class for deterministic slugification (`BuildJobFolderName(JobEntity job)`), path containment verification (`ResolveJobDirectory(string baseOutputDir, JobEntity job)`), and file path resolution (`resume.pdf`, `cover-letter.pdf`, `job-posting.md`, `resume.md`, `cover-letter.md`, `packet.json`). Guards nullable `JobEntity.Title` and `JobEntity.EmployerJobId`.
 - **`JobUrlFormatter`** (`ApplicationPackets/JobUrlFormatter.cs`) & **`JobPostingSnapshotBuilder`** (`ApplicationPackets/JobPostingSnapshotBuilder.cs`)
@@ -253,7 +258,7 @@ Following `AGENTS.md` ("One class, struct, record or interface per file") and `c
   - `GenerateForJobAsync(Guid, ...)` fetches via `JobRepository.GetByIdAsync` and **explicitly checks `job is null || job.IsDeleted`** (throwing `NotFoundException`, because `JobRepository.GetByIdAsync` does not filter `IsDeleted`).
   - Orchestrates: compute `effectiveForce = request.ForceRegenerate || !request.SkipExisting` → resolve `baseOutputDir` from `request.ProfileOverrides?.OutputDirectoryOverride`, `ApplicationPacketOptions.OutputDirectory`, `Path.Combine(ApplicationPacketOptions.ProfileDirectory, "applications")` (when `ProfileDirectory` is set), or `UserProfilePaths.GetDefaultApplicationsDir()` → check `IApplicationPacketStore.GetStatusAsync` (if complete and `!effectiveForce`, return `SkippedExisting` immediately with zero profile-file reads, LLM calls, or PDF renders) → load profile (`IUserProfileLoader.LoadAsync`) → generate `resume.md` & `cover-letter.md` (`ITextGenerator`) → render `resume.pdf` & `cover-letter.pdf` (`IPdfRenderer`) → build `job-posting.md` → atomically save (`IApplicationPacketStore.SavePacketAsync`).
 - **`ApplicationPacketServiceCollectionExtensions`** (`ApplicationPackets/ApplicationPacketServiceCollectionExtensions.cs`)
-  - `AddApplicationPacketServices(this IServiceCollection services, IConfiguration configuration)` registers `ApplicationPacketOptions`, `UserProfileResolver`, `IUserProfileLoader`, `IPdfRenderer` (singleton `PlaywrightPdfRenderer`), `IApplicationPacketStore`, and `IApplicationPacketService`.
+  - `AddApplicationPacketServices(this IServiceCollection services, IConfiguration configuration)` registers `ApplicationPacketOptions`, `UserProfileResolver`, `IUserProfileLoader`, `IPdfRenderer` (`MdToPdfRenderer` via typed/named `HttpClient` wired with `TracingHttpMessageHandler` from `ITraceContextProvider`), `IApplicationPacketStore`, and `IApplicationPacketService`.
 - **`CliArgumentNormalizer`** (`Configuration/CliArgumentNormalizer.cs`)
   - Pure static helper normalizing bare `--Flag` boolean CLI arguments into `--Flag=true` prior to `AddCommandLine(...)`.
 
@@ -360,13 +365,13 @@ Per `AGENTS.md` ("Always _maintain_ Architecture Memory in the ./wiki/architectu
 1. **`README.md`**:
    - Update user setup instructions to reflect `Documents\Fidalgo\` for user profile documents (`resume.md`, `career-story.md`, `career-goals.md`) and `Documents\Fidalgo\applications\<job-folder>\` for generated application packets, while keeping `config.json` in `%APPDATA%\.config\Fidalgo\config.json` and `jobs.db` / `logs\` in `%APPDATA%\fidalgo\`.
 2. **`wiki/architecture/architecture-summary.md`**:
-   - Replace `QuestPDF` with `Markdig` (BSD-2-Clause) + `Microsoft.Playwright` Chromium `Page.PdfAsync` (Apache-2.0) behind `IPdfRenderer`.
+   - Replace `QuestPDF` with `spawnia/md-to-pdf` (`WeasyPrint`, MIT/BSD-3-Clause) over HTTP behind `IPdfRenderer` (`MdToPdfRenderer`).
    - Update Web UI description from Razor Pages to ASP.NET Core Minimal API (`Fidalgo.Host`) + React/Vite (`Fidalgo.Frontend`).
    - Document `ApplicationPacketService`, `ITextGenerator`, `IUserProfileLoader`, `Documents\Fidalgo\` for profile documents (with legacy fallback to `%APPDATA%\.config\Fidalgo\`), `Documents\Fidalgo\applications\<job-folder>\` output structure (`resume.pdf`, `cover-letter.pdf`, `job-posting.md`), and `%APPDATA%\.config\Fidalgo\config.json` strictly for user configuration.
    - Document `Fidalgo.Agent` batch packet flags (`--GeneratePackets`, `--TargetJobId`, `--ForceRegenerate`, `--SkipExisting`, `--OutputDir`).
 3. **`wiki/architecture/c4-container.puml` & `wiki/architecture/c4-component.puml`**:
    - Align container/component diagrams with the actual 4-project topology (`Fidalgo.Ingest`, `Fidalgo.Agent`, `Fidalgo.Host`, `Fidalgo.Frontend`, `Fidalgo.Shared`).
-   - Add `ApplicationPacketService`, `ITextGenerator` (`OpenAiTextGenerator`), `IPdfRenderer` (`PlaywrightPdfRenderer`), `IApplicationPacketStore`, and `User File Store` (`Documents\Fidalgo\` + `applications/`).
+   - Add `ApplicationPacketService`, `ITextGenerator` (`OpenAiTextGenerator`), `IPdfRenderer` (`MdToPdfRenderer`), the external `md-to-pdf` container (`http://localhost:8000`), `IApplicationPacketStore`, and `User File Store` (`Documents\Fidalgo\` + `applications/`).
 4. **`wiki/architecture/er-diagram.md`**:
    - Document that application packet files live deterministically on the filesystem keyed by `JOB.InternalId` slug (`Documents\Fidalgo\applications\<employer>_<title>_<short-id>\`) with no SQLite schema change required in v1.
 
@@ -389,9 +394,11 @@ Per `AGENTS.md` ("Always _maintain_ Architecture Memory in the ./wiki/architectu
    - `ApplicationPacketPaths.BuildJobFolderName` strips `Path.GetInvalidFileNameChars()`, collapses non-alphanumeric runs to `-`, guards against Windows reserved device names (`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, `LPT1`–`LPT9`), and bounds total path length well below Windows `MAX_PATH`.
    - `ResolveJobDirectory` asserts `Path.GetFullPath(targetDir).StartsWith(Path.GetFullPath(baseOutputDir) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)`.
    - `GET /api/jobs/{id}/packet/files/{fileName}` enforces an explicit 5-file allowlist (`resume.pdf`, `cover-letter.pdf`, `job-posting.md`, `resume.md`, `cover-letter.md`).
-2. **HTML / SSRF / XSS Sanitization in PDF Rendering:**
-   - `PlaywrightPdfRenderer` builds its `Markdig` pipeline with `.DisableHtml()` so raw `<script>`, `<iframe>`, `<img>`, or `<link>` tags emitted by the LLM or present in job descriptions are escaped/ignored rather than interpreted by Chromium.
-   - Playwright `IPage.RouteAsync("**/*", route => route.AbortAsync())` blocks all outbound HTTP, `file://`, and subresource requests during PDF rendering.
+2. **PDF Renderer Isolation & Input Safety (`MdToPdfRenderer` + `PdfCssProvider`):**
+   - No local headless browser is launched for PDF rendering, eliminating local Chromium process/SSRF surface inside `Fidalgo.Host` and `Fidalgo.Agent`.
+   - `css` passed to `spawnia/md-to-pdf` is a static, server-owned stylesheet from `PdfCssProvider` (never derived from job descriptions or LLM output).
+   - `MdToPdfEndpoint` is configured strictly via server configuration (`ApplicationPacket:MdToPdfEndpoint`), never per-request user input, and outbound calls propagate W3C Trace Context via `TracingHttpMessageHandler`.
+   - `MdToPdfRenderer` validates the `%PDF` magic header and maps HTTP/timeout/parse failures to `AgentExecutionException` (returning `502` `ProblemDetails` in `Fidalgo.Host` without exposing internal stack traces).
 3. **Prompt Injection Defense:**
    - Prompts clearly delimit `<candidate_resume>`, `<career_story>`, `<career_goals>`, and `<job_posting>` blocks and instruct the model to treat job posting text strictly as data.
 4. **PII & Secret Hygiene:**
@@ -421,8 +428,8 @@ All tests follow `AGENTS.md` (`NSubstitute` for mocking, `Nullable` enabled, `Tr
   - Verifies regeneration when `ForceRegenerate=true` or when existing packet is incomplete.
   - Verifies exact sequencing: two `ITextGenerator` calls (resume + cover letter) → two `IPdfRenderer` calls (`Resume` + `CoverLetter`) → atomic save with `job-posting.md`.
   - Verifies no partial/corrupt packet is committed if the second LLM call or PDF render throws.
-- **`OpenAiTextGeneratorTests` & `PlaywrightPdfRenderer` HTML/pipeline tests:**
-  - Verify `MarkdownToHtml` escapes raw `<script>`/`<img src=...>` tags via `DisableHtml()`.
+- **`OpenAiTextGeneratorTests` & `MdToPdfRendererTests` (using `HttpMessageHandlerStub`):**
+  - Verify `MdToPdfRenderer` sends `POST` to `MdToPdfEndpoint` with `FormUrlEncodedContent` (`markdown`, `css`, `engine`), differentiates `Resume` vs `CoverLetter` CSS via `PdfCssProvider`, validates `%PDF-` header bytes, retries transient `503` responses via `Polly`, enforces `PdfTimeoutSeconds`, and throws `AgentExecutionException` on `500`/empty/non-PDF responses.
   - Verify `OpenAiTextGenerator` retry on transient errors, timeout cancellation, and `AgentExecutionException` on empty LLM content.
 
 ### 6.2 CLI & Agent Tests (`Fidalgo.Agent.Tests` & `Fidalgo.Ingest.Tests`)
@@ -448,7 +455,7 @@ All tests follow `AGENTS.md` (`NSubstitute` for mocking, `Nullable` enabled, `Tr
 
 ### 6.4 Optional Smoke Verification & Build Gates
 
-- Optional tagged `[Trait("Category", "Integration")]` Playwright Chromium PDF smoke test verifying non-empty `%PDF-` header bytes on environments where `playwright install chromium` is present (excluded from fast hermetic unit CI if browser binary is absent).
+- Optional tagged `[Trait("Category", "Integration")]` `MdToPdfRenderer` smoke test against a running `spawnia/md-to-pdf` container (`http://localhost:8000`) verifying non-empty `%PDF-` header bytes (excluded from fast hermetic unit CI when the sidecar container is not running).
 - Full verification gates required before every commit:
   - `dotnet build src/Fidalgo.slnx` (0 warnings, `TreatWarningsAsErrors=true`)
   - `dotnet test src/Fidalgo.slnx --collect:"XPlat Code Coverage" --settings ./coverlet.runsettings`
