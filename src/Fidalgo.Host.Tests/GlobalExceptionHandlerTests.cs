@@ -54,6 +54,43 @@ public class GlobalExceptionHandlerTests
     }
 
     [Fact]
+    public async Task TryHandleAsync_ArgumentOutOfRangeException_Returns400ValidationProblemWithParamNameAndTraceId()
+    {
+        var context = CreateHttpContext("/api/jobs");
+        var exception = new ArgumentOutOfRangeException("pageSize", "PageSize must be between 1 and 100.");
+
+        var handled = await _handler.TryHandleAsync(context, exception, CancellationToken.None);
+
+        Assert.True(handled);
+        Assert.Equal(StatusCodes.Status400BadRequest, context.Response.StatusCode);
+        var body = await ReadBodyAsync(context);
+        var problem = JsonSerializer.Deserialize<ValidationProblemDetails>(body, JsonOptions);
+        Assert.NotNull(problem);
+        Assert.Equal(StatusCodes.Status400BadRequest, problem!.Status);
+        Assert.True(problem.Errors.ContainsKey("pageSize"));
+        Assert.Contains("PageSize must be between 1 and 100.", problem.Errors["pageSize"][0]);
+        Assert.True(problem.Extensions.ContainsKey("traceId"));
+    }
+
+    [Fact]
+    public async Task TryHandleAsync_ArgumentExceptionWithoutParamName_UsesRequestKey()
+    {
+        var context = CreateHttpContext("/api/jobs");
+        var exception = new ArgumentException("Invalid argument.");
+
+        var handled = await _handler.TryHandleAsync(context, exception, CancellationToken.None);
+
+        Assert.True(handled);
+        Assert.Equal(StatusCodes.Status400BadRequest, context.Response.StatusCode);
+        var body = await ReadBodyAsync(context);
+        var problem = JsonSerializer.Deserialize<ValidationProblemDetails>(body, JsonOptions);
+        Assert.NotNull(problem);
+        Assert.True(problem!.Errors.ContainsKey("request"));
+        Assert.Contains("Invalid argument.", problem.Errors["request"]);
+        Assert.True(problem.Extensions.ContainsKey("traceId"));
+    }
+
+    [Fact]
     public async Task TryHandleAsync_NotFoundException_Returns404()
     {
         var context = CreateHttpContext("/api/jobs/123/packet");

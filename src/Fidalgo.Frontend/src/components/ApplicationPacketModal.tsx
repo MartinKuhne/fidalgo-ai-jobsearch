@@ -8,6 +8,7 @@ import {
   getPacketFileUrl,
   getProfileDefaults,
   withDownloadParam,
+  withPreviewVersion,
   type ApplicationPacketResultDto,
   type ApplicationPacketStatusDto,
   type GeneratePacketRequest,
@@ -513,7 +514,7 @@ export function ApplicationPacketModal({ job, onClose }: ApplicationPacketModalP
                       <iframe
                         key={`resume-${previewVersion}`}
                         title="Resume PDF Preview"
-                        src={activeFiles.resumePdfUrl}
+                        src={withPreviewVersion(activeFiles.resumePdfUrl, previewVersion)}
                         className="packet-pdf-frame"
                       />
                     )}
@@ -522,7 +523,7 @@ export function ApplicationPacketModal({ job, onClose }: ApplicationPacketModalP
                       <iframe
                         key={`cover-letter-${previewVersion}`}
                         title="Cover Letter PDF Preview"
-                        src={activeFiles.coverLetterPdfUrl}
+                        src={withPreviewVersion(activeFiles.coverLetterPdfUrl, previewVersion)}
                         className="packet-pdf-frame"
                       />
                     )}

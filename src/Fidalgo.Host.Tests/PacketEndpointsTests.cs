@@ -6,6 +6,7 @@ using Fidalgo.Host.Models;
 using Fidalgo.Shared.Configuration;
 using Fidalgo.Shared.ErrorHandling;
 using Fidalgo.Shared.Llm;
+using Fidalgo.Shared.Logging;
 using Fidalgo.Shared.Models;
 using Fidalgo.Shared.Pdf;
 using Fidalgo.Shared.Storage;
@@ -284,6 +285,144 @@ public class PacketEndpointsTests
         var response = await client.GetAsync("/api/jobs?page=1&pageSize=10");
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetJobs_WithInvalidPage_Returns400ValidationProblem()
+    {
+        using var fixture = new HostTestFixture();
+        using var client = fixture.CreateClient();
+
+        var response = await client.GetAsync("/api/jobs?email=candidate@example.com&page=0&pageSize=10");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>(JsonOptions);
+        Assert.NotNull(problem);
+        Assert.True(problem!.Errors.ContainsKey("page"));
+        Assert.True(problem.Extensions.ContainsKey("traceId"));
+    }
+
+    [Fact]
+    public async Task PacketAndResumeEndpoints_WithEmptyGuid_Return404()
+    {
+        using var fixture = new HostTestFixture();
+        using var client = fixture.CreateClient();
+
+        var packetStatusResponse = await client.GetAsync($"/api/jobs/{Guid.Empty}/packet");
+        var packetFileResponse = await client.GetAsync($"/api/jobs/{Guid.Empty}/packet/files/resume.pdf");
+        var legacyResumeResponse = await client.PostAsJsonAsync($"/api/jobs/{Guid.Empty}/resume", new ResumeRequest());
+
+        Assert.Equal(HttpStatusCode.NotFound, packetStatusResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, packetFileResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, legacyResumeResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task PostGeneratePacket_WithOverridesAndForce_RegeneratesExistingPacket()
+    {
+        using var fixture = new HostTestFixture();
+        fixture.WriteProfileFile("resume.md", "# Server Base Resume");
+        var job = await fixture.SeedJobAsync();
+
+        fixture.TextGenerator
+            .GenerateAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TextGenerationOptions?>(), Arg.Any<CancellationToken>())
+            .Returns("# Initial Resume", "# Initial Cover Letter", "# Forced Override Resume", "# Forced Cover Letter");
+        fixture.PdfRenderer
+            .RenderMarkdownToPdfAsync(Arg.Any<string>(), Arg.Is<PdfRenderOptions>(o => o.Kind == PdfDocumentKind.Resume), Arg.Any<CancellationToken>())
+            .Returns(FakeResumePdfBytes);
+        fixture.PdfRenderer
+            .RenderMarkdownToPdfAsync(Arg.Any<string>(), Arg.Is<PdfRenderOptions>(o => o.Kind == PdfDocumentKind.CoverLetter), Arg.Any<CancellationToken>())
+            .Returns(FakeCoverLetterPdfBytes);
+
+        using var client = fixture.CreateClient();
+
+        var firstResponse = await client.PostAsJsonAsync($"/api/jobs/{job.InternalId}/packet", new GeneratePacketRequest());
+        Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
+
+        var overrideRequest = new GeneratePacketRequest(
+            BaseResumeOverride: "# Custom Override Resume",
+            CareerStoryOverride: "Custom story override",
+            CareerGoalsOverride: "Custom goals override",
+            Force: true);
+        var forcedResponse = await client.PostAsJsonAsync($"/api/jobs/{job.InternalId}/packet", overrideRequest);
+
+        Assert.Equal(HttpStatusCode.OK, forcedResponse.StatusCode);
+        var result = await forcedResponse.Content.ReadFromJsonAsync<ApplicationPacketResultDto>(JsonOptions);
+        Assert.NotNull(result);
+        Assert.Equal("Generated", result!.Outcome);
+        Assert.Equal("# Forced Override Resume", result.ResumeMarkdown);
+        Assert.Equal("# Forced Cover Letter", result.CoverLetterMarkdown);
+
+        await fixture.TextGenerator.Received(4).GenerateAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TextGenerationOptions?>(), Arg.Any<CancellationToken>());
+        var prompts = fixture.TextGenerator.ReceivedCalls()
+            .Select(c => (string)c.GetArguments()[1]!)
+            .ToList();
+        Assert.Contains(prompts, p => p.Contains("Custom Override Resume", StringComparison.Ordinal));
+        Assert.Contains(prompts, p => p.Contains("Custom story override", StringComparison.Ordinal));
+        Assert.Contains(prompts, p => p.Contains("Custom goals override", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task GetPacketFile_SetsCacheControlNoStoreHeader()
+    {
+        using var fixture = new HostTestFixture();
+        fixture.WriteProfileFile("resume.md", "# Base Resume");
+        var job = await fixture.SeedJobAsync();
+
+        fixture.TextGenerator
+            .GenerateAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TextGenerationOptions?>(), Arg.Any<CancellationToken>())
+            .Returns("# Tailored Resume", "# Tailored Cover Letter");
+        fixture.PdfRenderer
+            .RenderMarkdownToPdfAsync(Arg.Any<string>(), Arg.Is<PdfRenderOptions>(o => o.Kind == PdfDocumentKind.Resume), Arg.Any<CancellationToken>())
+            .Returns(FakeResumePdfBytes);
+        fixture.PdfRenderer
+            .RenderMarkdownToPdfAsync(Arg.Any<string>(), Arg.Is<PdfRenderOptions>(o => o.Kind == PdfDocumentKind.CoverLetter), Arg.Any<CancellationToken>())
+            .Returns(FakeCoverLetterPdfBytes);
+
+        using var client = fixture.CreateClient();
+        var generateResponse = await client.PostAsJsonAsync($"/api/jobs/{job.InternalId}/packet", new GeneratePacketRequest());
+        Assert.Equal(HttpStatusCode.OK, generateResponse.StatusCode);
+
+        var fileResponse = await client.GetAsync($"/api/jobs/{job.InternalId}/packet/files/resume.pdf");
+        Assert.Equal(HttpStatusCode.OK, fileResponse.StatusCode);
+        Assert.NotNull(fileResponse.Headers.CacheControl);
+        Assert.True(fileResponse.Headers.CacheControl!.NoStore);
+        Assert.True(fileResponse.Headers.CacheControl.NoCache);
+        Assert.True(fileResponse.Headers.CacheControl.MustRevalidate);
+    }
+
+    [Fact]
+    public async Task RequestMiddleware_PopulatesTraceContextDuringRequestAndClearsAfterward()
+    {
+        using var fixture = new HostTestFixture();
+        fixture.WriteProfileFile("resume.md", "# Base Resume");
+        var job = await fixture.SeedJobAsync();
+        var traceContextProvider = fixture.Services.GetRequiredService<ITraceContextProvider>();
+
+        TraceContext? capturedDuringRequest = null;
+        fixture.TextGenerator
+            .GenerateAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TextGenerationOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                capturedDuringRequest = traceContextProvider.GetCurrentContext();
+                return "# Tailored Resume";
+            }, _ => "# Tailored Cover Letter");
+        fixture.PdfRenderer
+            .RenderMarkdownToPdfAsync(Arg.Any<string>(), Arg.Is<PdfRenderOptions>(o => o.Kind == PdfDocumentKind.Resume), Arg.Any<CancellationToken>())
+            .Returns(FakeResumePdfBytes);
+        fixture.PdfRenderer
+            .RenderMarkdownToPdfAsync(Arg.Any<string>(), Arg.Is<PdfRenderOptions>(o => o.Kind == PdfDocumentKind.CoverLetter), Arg.Any<CancellationToken>())
+            .Returns(FakeCoverLetterPdfBytes);
+
+        using var client = fixture.CreateClient();
+        var response = await client.PostAsJsonAsync($"/api/jobs/{job.InternalId}/packet", new GeneratePacketRequest());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(capturedDuringRequest);
+        Assert.False(string.IsNullOrWhiteSpace(capturedDuringRequest!.TraceId));
+        Assert.False(string.IsNullOrWhiteSpace(capturedDuringRequest.SpanId));
+        Assert.Equal(capturedDuringRequest.TraceId, capturedDuringRequest.CorrelationId);
+        Assert.Null(traceContextProvider.GetCurrentContext());
     }
 
     private sealed class HostTestFixture : WebApplicationFactory<Program>

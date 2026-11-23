@@ -36,29 +36,32 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
 
         if (exception is ValidationException validationException)
         {
-            _logger.LogWarning(
+            return await WriteValidationProblemAsync(
+                httpContext,
                 validationException,
-                "Validation failure for {Method} {Path} (TraceId={TraceId}).",
-                httpContext.Request.Method,
+                validationException.Errors,
+                validationException.Message,
                 instance,
-                traceId);
+                traceId,
+                cancellationToken);
+        }
 
-            var validationProblem = new ValidationProblemDetails(validationException.Errors)
+        if (exception is ArgumentException argEx)
+        {
+            var paramKey = string.IsNullOrWhiteSpace(argEx.ParamName) ? "request" : argEx.ParamName;
+            var errors = new Dictionary<string, string[]>
             {
-                Status = StatusCodes.Status400BadRequest,
-                Title = "Validation Failed",
-                Detail = validationException.Message,
-                Instance = instance
+                [paramKey] = [argEx.Message]
             };
-            validationProblem.Extensions["traceId"] = traceId;
 
-            httpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
-            await httpContext.Response.WriteAsJsonAsync(
-                validationProblem,
-                options: null,
-                contentType: "application/problem+json",
-                cancellationToken: cancellationToken);
-            return true;
+            return await WriteValidationProblemAsync(
+                httpContext,
+                argEx,
+                errors,
+                argEx.Message,
+                instance,
+                traceId,
+                cancellationToken);
         }
 
         ProblemDetails problem = exception switch
@@ -126,6 +129,40 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
         httpContext.Response.StatusCode = statusCode;
         await httpContext.Response.WriteAsJsonAsync(
             problem,
+            options: null,
+            contentType: "application/problem+json",
+            cancellationToken: cancellationToken);
+        return true;
+    }
+
+    private async ValueTask<bool> WriteValidationProblemAsync(
+        HttpContext httpContext,
+        Exception exception,
+        IDictionary<string, string[]> errors,
+        string detail,
+        string? instance,
+        string traceId,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogWarning(
+            exception,
+            "Validation failure for {Method} {Path} (TraceId={TraceId}).",
+            httpContext.Request.Method,
+            instance,
+            traceId);
+
+        var validationProblem = new ValidationProblemDetails(errors)
+        {
+            Status = StatusCodes.Status400BadRequest,
+            Title = "Validation Failed",
+            Detail = detail,
+            Instance = instance
+        };
+        validationProblem.Extensions["traceId"] = traceId;
+
+        httpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
+        await httpContext.Response.WriteAsJsonAsync(
+            validationProblem,
             options: null,
             contentType: "application/problem+json",
             cancellationToken: cancellationToken);

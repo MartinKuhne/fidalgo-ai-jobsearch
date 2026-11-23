@@ -8,6 +8,7 @@ using Fidalgo.Shared.ApplicationPackets.Prompts;
 using Fidalgo.Shared.Configuration;
 using Fidalgo.Shared.ErrorHandling;
 using Fidalgo.Shared.Llm;
+using Fidalgo.Shared.Logging;
 using Fidalgo.Shared.Models;
 using Fidalgo.Shared.Storage;
 using Fidalgo.Shared.UserProfile;
@@ -102,6 +103,49 @@ using (var scope = app.Services.CreateScope())
     await db.Database.EnsureCreatedAsync();
 }
 
+app.Use(async (httpContext, next) =>
+{
+    Activity? startedActivity = null;
+    var activity = Activity.Current;
+    if (activity is null)
+    {
+        startedActivity = new Activity("Fidalgo.Host.Request");
+        startedActivity.SetIdFormat(ActivityIdFormat.W3C);
+        startedActivity.Start();
+        activity = startedActivity;
+    }
+
+    var traceId = activity.TraceId != default
+        ? activity.TraceId.ToHexString()
+        : Guid.NewGuid().ToString("N");
+    var spanId = activity.SpanId != default
+        ? activity.SpanId.ToHexString()
+        : Guid.NewGuid().ToString("N")[..16];
+    var parentSpanId = activity.ParentSpanId != default
+        ? activity.ParentSpanId.ToHexString()
+        : null;
+
+    var traceContextProvider = httpContext.RequestServices.GetRequiredService<ITraceContextProvider>();
+    traceContextProvider.SetCurrentContext(new TraceContext(
+        TraceId: traceId,
+        SpanId: spanId,
+        ParentSpanId: parentSpanId,
+        CorrelationId: traceId,
+        Timestamp: DateTime.UtcNow,
+        IsRoot: parentSpanId is null));
+
+    using var correlationScope = Serilog.Context.LogContext.PushProperty("CorrelationId", traceId);
+    try
+    {
+        await next(httpContext);
+    }
+    finally
+    {
+        traceContextProvider.SetCurrentContext(null!);
+        startedActivity?.Dispose();
+    }
+});
+
 app.UseExceptionHandler();
 app.UseDefaultFiles();
 app.UseStaticFiles();
@@ -185,6 +229,11 @@ app.MapGet("/api/jobs/{id:guid}/packet", async (
     IOptions<ApplicationPacketOptions> packetOptions,
     CancellationToken cancellationToken) =>
 {
+    if (id == Guid.Empty)
+    {
+        return Results.NotFound();
+    }
+
     var job = await jobsService.GetJobByIdAsync(id, cancellationToken);
     if (job is null || job.IsDeleted)
     {
@@ -254,6 +303,11 @@ app.MapGet("/api/jobs/{id:guid}/packet/files/{fileName}", async (
             });
     }
 
+    if (id == Guid.Empty)
+    {
+        return Results.NotFound();
+    }
+
     var job = await jobsService.GetJobByIdAsync(id, cancellationToken);
     if (job is null || job.IsDeleted)
     {
@@ -271,6 +325,8 @@ app.MapGet("/api/jobs/{id:guid}/packet/files/{fileName}", async (
     var contentType = canonicalFileName.EndsWith(".pdf", StringComparison.Ordinal)
         ? "application/pdf"
         : "text/markdown; charset=utf-8";
+
+    httpContext.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
 
     if (download ?? false)
     {
@@ -294,6 +350,11 @@ app.MapPost("/api/jobs/{id:guid}/resume", async (
     IOptions<ApplicationPacketOptions> packetOptions,
     CancellationToken cancellationToken) =>
 {
+    if (id == Guid.Empty)
+    {
+        return Results.NotFound();
+    }
+
     var job = await jobsService.GetJobByIdAsync(id, cancellationToken);
     if (job is null || job.IsDeleted)
     {

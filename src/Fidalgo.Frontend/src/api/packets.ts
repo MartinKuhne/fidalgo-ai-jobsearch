@@ -161,22 +161,43 @@ export async function fetchPacketTextFile(
 }
 
 /**
+ * Appends a query parameter (`?key=value` or `&key=value`) to a URL.
+ */
+function appendQueryParam(fileUrl: string, key: string, value: string): string {
+  if (!fileUrl) return fileUrl;
+  const separator = fileUrl.includes('?') ? '&' : '?';
+  return `${fileUrl}${separator}${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+}
+
+/**
  * Builds the canonical URL for a file within a job's application packet.
  */
 export function getPacketFileUrl(
   jobId: string,
   fileName: PacketFileName,
   download = false,
+  version?: number,
 ): string {
-  const base = `/api/jobs/${encodeURIComponent(jobId)}/packet/files/${encodeURIComponent(fileName)}`;
-  return download ? `${base}?download=true` : base;
+  let url = `/api/jobs/${encodeURIComponent(jobId)}/packet/files/${encodeURIComponent(fileName)}`;
+  if (download) {
+    url = appendQueryParam(url, 'download', 'true');
+  }
+  if (version !== undefined) {
+    url = appendQueryParam(url, 'v', String(version));
+  }
+  return url;
 }
 
 /**
  * Appends `?download=true` (or `&download=true`) to a packet file URL for attachment downloads.
  */
 export function withDownloadParam(fileUrl: string): string {
-  if (!fileUrl) return fileUrl;
-  const separator = fileUrl.includes('?') ? '&' : '?';
-  return `${fileUrl}${separator}download=true`;
+  return appendQueryParam(fileUrl, 'download', 'true');
+}
+
+/**
+ * Appends `?v=<version>` (or `&v=<version>`) to a packet file URL for preview cache-busting.
+ */
+export function withPreviewVersion(fileUrl: string, version: number): string {
+  return appendQueryParam(fileUrl, 'v', String(version));
 }

@@ -200,7 +200,7 @@ describe('App', () => {
 
     // Resume PDF tab active by default
     const resumeIframe = screen.getByTitle('Resume PDF Preview');
-    expect(resumeIframe).toHaveAttribute('src', '/api/jobs/job-1/packet/files/resume.pdf');
+    expect(resumeIframe).toHaveAttribute('src', '/api/jobs/job-1/packet/files/resume.pdf?v=1');
     expect(screen.getByRole('link', { name: 'Download resume.pdf' })).toHaveAttribute(
       'href',
       '/api/jobs/job-1/packet/files/resume.pdf?download=true',
@@ -211,7 +211,7 @@ describe('App', () => {
     const coverIframe = screen.getByTitle('Cover Letter PDF Preview');
     expect(coverIframe).toHaveAttribute(
       'src',
-      '/api/jobs/job-1/packet/files/cover-letter.pdf',
+      '/api/jobs/job-1/packet/files/cover-letter.pdf?v=1',
     );
     expect(screen.getByRole('link', { name: 'Download cover-letter.pdf' })).toHaveAttribute(
       'href',
@@ -327,7 +327,7 @@ describe('ApplicationPacketModal', () => {
     expect(forceCheckbox).not.toBeChecked();
     expect(screen.getByTitle('Resume PDF Preview')).toHaveAttribute(
       'src',
-      '/api/jobs/job-1/packet/files/resume.pdf',
+      '/api/jobs/job-1/packet/files/resume.pdf?v=0',
     );
 
     // Open collapsible override inputs and customize base resume
@@ -351,5 +351,88 @@ describe('ApplicationPacketModal', () => {
         baseResumeOverride: '# Updated Resume Override',
       });
     });
+
+    // Cache-busting ?v= query param increments after regenerate
+    await waitFor(() => {
+      expect(screen.getByTitle('Resume PDF Preview')).toHaveAttribute(
+        'src',
+        '/api/jobs/job-1/packet/files/resume.pdf?v=1',
+      );
+    });
+    fireEvent.click(screen.getByRole('tab', { name: 'Cover Letter (cover-letter.pdf)' }));
+    expect(screen.getByTitle('Cover Letter PDF Preview')).toHaveAttribute(
+      'src',
+      '/api/jobs/job-1/packet/files/cover-letter.pdf?v=1',
+    );
+  });
+
+  it('supports resetting custom override inputs back to server defaults', async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === '/api/profile/defaults') return jsonResponse(sampleDefaults);
+      if (url === '/api/jobs/job-1/packet' && (!init?.method || init.method === 'GET')) {
+        return jsonResponse(emptyPacketStatus);
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+
+    render(
+      <ApplicationPacketModal
+        job={{ internalId: 'job-1', title: 'Software Engineer', employer: 'Tech Corp' }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await screen.findByText('resume.md: Loaded from server');
+    expect(screen.queryByRole('button', { name: 'Reset to server defaults' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Customize Profile Inputs (Optional)' }));
+
+    const resumeTextarea = screen.getByLabelText('Base Resume Override (resume.md)');
+    const storyTextarea = screen.getByLabelText('Career Story Override (career-story.md)');
+    const goalsTextarea = screen.getByLabelText('Career Goals Override (career-goals.md)');
+
+    fireEvent.change(resumeTextarea, { target: { value: '# Custom Resume' } });
+    fireEvent.change(storyTextarea, { target: { value: 'Custom story' } });
+    fireEvent.change(goalsTextarea, { target: { value: 'Custom goals' } });
+
+    const resetBtn = screen.getByRole('button', { name: 'Reset to server defaults' });
+    fireEvent.click(resetBtn);
+
+    expect(resumeTextarea).toHaveValue(sampleDefaults.baseResumeMarkdown);
+    expect(storyTextarea).toHaveValue(sampleDefaults.careerStoryMarkdown);
+    expect(goalsTextarea).toHaveValue('');
+    expect(screen.queryByRole('button', { name: 'Reset to server defaults' })).not.toBeInTheDocument();
+  });
+
+  it('displays error banner when /api/profile/defaults fails to load', async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === '/api/profile/defaults') {
+        return jsonResponse(
+          {
+            title: 'Internal Server Error',
+            status: 500,
+            detail: 'Failed to read server profile directory.',
+          },
+          500,
+        );
+      }
+      if (url === '/api/jobs/job-1/packet') {
+        return jsonResponse(emptyPacketStatus);
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+
+    render(
+      <ApplicationPacketModal
+        job={{ internalId: 'job-1', title: 'Software Engineer', employer: 'Tech Corp' }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Internal Server Error');
+    expect(alert).toHaveTextContent('Failed to read server profile directory.');
   });
 });
