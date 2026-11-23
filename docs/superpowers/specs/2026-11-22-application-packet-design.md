@@ -24,10 +24,10 @@ This specification defines the **Application Packet Extension**: a cohesive, tes
 
 ### 2.1 Goals
 
-- **Reuse existing profile conventions:** Reuse `career-story.md` / `--CareerStory`, `career-goals.md` / `--CareerGoals`, `resume.md` / `--Resume`, and `config.json` in `%APPDATA%\.config\Fidalgo\` (`UserProfilePaths`, `UserProfileResolver`, `UserProfileConfig`).
-- **Zero-flag batch/service execution:** Ensure `Fidalgo.Agent`, `Fidalgo.Ingest`, and `Fidalgo.Host` resolve default profile files and configuration from `%APPDATA%\.config\Fidalgo\` so scheduled runs, services, and UI sessions work without manual CLI flags or file uploads.
+- **Reuse existing profile conventions:** Reuse `career-story.md` / `--CareerStory`, `career-goals.md` / `--CareerGoals`, `resume.md` / `--Resume`, and `config.json` (`UserProfilePaths`, `UserProfileResolver`, `UserProfileConfig`), cleanly separating **configuration** (`%APPDATA%\.config\Fidalgo\config.json`), **application state/logs** (`%APPDATA%\fidalgo\`), and **user documents** (`Documents\Fidalgo\`).
+- **Zero-flag batch/service execution:** Ensure `Fidalgo.Agent`, `Fidalgo.Ingest`, and `Fidalgo.Host` resolve `config.json` from `%APPDATA%\.config\Fidalgo\` and default user documents from `Documents\Fidalgo\` (with legacy fallback to `%APPDATA%\.config\Fidalgo\`) so scheduled runs, services, and UI sessions work without manual CLI flags or file uploads.
 - **Grounded dual-document generation:** Generate both `resume.pdf` and `cover-letter.pdf` informed by `JobEntity` details (`Title`, `Employer`, `Description`, `Pros`, `Cons`, `ResumeHints`, salary/source metadata), `resume.md`, `career-story.md`, and `career-goals.md`—strictly prohibiting fabrication of unverified experience.
-- **Self-contained per-job packet directory:** Persist `resume.pdf`, `cover-letter.pdf`, and `job-posting.md` (plus supporting Markdown/manifest files) in a deterministic, sanitized per-job folder under `%APPDATA%\.config\Fidalgo\applications\<sanitized-job-folder>\` (configurable via `ApplicationsOutputDir` / `--OutputDir`).
+- **Self-contained per-job packet directory:** Persist `resume.pdf`, `cover-letter.pdf`, and `job-posting.md` (plus supporting Markdown/manifest files) in a deterministic, sanitized per-job folder under `Documents\Fidalgo\applications\<sanitized-job-folder>\` (configurable via `ApplicationPacket:OutputDirectory` / `--OutputDir`).
 - **Unattended & interactive parity:**
   - `Fidalgo.Agent`: Support unattended batch packet generation (e.g., for `Recommendation == "Apply"` jobs) with idempotency (`--SkipExisting`, `--ForceRegenerate`, `--TargetJobId`, `--GeneratePackets`, `--OutputDir`).
   - `Fidalgo.Host` + `Fidalgo.Frontend`: Load profile defaults on the server, expose packet status/generation/file endpoints, and preview/download both PDFs and `job-posting.md` in the UI.
@@ -77,7 +77,8 @@ Adopt **Option A (`Markdig` [BSD-2-Clause] + HTML/CSS print template + `Microsof
 **Base Output Directory Resolution (precedence highest to lowest):**
 1. Explicit CLI `--OutputDir <path>` (in `Fidalgo.Agent`) or explicit service call override (`ApplicationPacketGenerationRequest.OutputDirectoryOverride`).
 2. Configuration key `ApplicationPacket:OutputDirectory` (bound from `appsettings.json`, `config.json`, environment variables).
-3. Default fallback: `Path.Combine(UserProfilePaths.GetDefaultBaseDir(), "applications")` → `%APPDATA%\.config\Fidalgo\applications` on Windows (or `Path.Combine(options.ProfileDirectory, "applications")` when `ApplicationPacket:ProfileDirectory` is overridden for tests/containers).
+3. Configured profile override (`ApplicationPacket:ProfileDirectory`): when set (e.g., tests/containers), `Path.Combine(options.ProfileDirectory, "applications")`.
+4. Default fallback: `UserProfilePaths.GetDefaultApplicationsDir()` → `Path.Combine(UserProfilePaths.GetDefaultDocumentsDir(), "applications")` (`Documents\Fidalgo\applications\` on Windows).
 
 **Per-Job Folder Naming Convention (`ApplicationPacketPaths.BuildJobFolderName`):**
 `<sanitized-employer>_<sanitized-title>_<short-id>`
@@ -107,12 +108,15 @@ Adopt **Option A (`Markdig` [BSD-2-Clause] + HTML/CSS print template + `Microsof
 
 ### 3.3 Profile Defaults, Zero-Flag Execution & Prompt Grounding
 
-1. **Unified User Profile Resolution (`UserProfilePaths` / `UserProfileResolver` / `UserProfileConfig`):**
-   - Reuse existing file names in `%APPDATA%\.config\Fidalgo\`:
+1. **Unified User Profile & Storage Separation (`UserProfilePaths` / `UserProfileResolver` / `UserProfileConfig`):**
+   - **Configuration** stays in `%APPDATA%\.config\Fidalgo\config.json` (`UserProfilePaths.GetDefaultBaseDir()` + `UserProfileConfig.ConfigFileName`).
+   - **Application state & logs** stay in `%APPDATA%\fidalgo\` (`jobs.db` via `Constants.GetDefaultDatabasePath()`, `logs\log-.json`).
+   - **User documents & generated packets** live in the user's Documents folder (`UserProfilePaths.GetDefaultDocumentsDir()` → `Documents\Fidalgo\`):
      - `resume.md` (`UserProfilePaths.ResumeFileName`)
      - `career-story.md` (`UserProfilePaths.CareerStoryFileName` — satisfies requirement to reuse `career-story.md` / `--CareerStory`)
      - `career-goals.md` (`UserProfilePaths.CareerGoalsFileName`)
-     - `config.json` (`UserProfileConfig.ConfigFileName`)
+     - `applications\<sanitized-job-folder>\` (`UserProfilePaths.GetDefaultApplicationsDir()`)
+   - **Backward-compatible secondary fallback:** When no `ProfileDirectory` override is set, `UserProfileResolver` searches `Documents\Fidalgo\` first and falls back to `%APPDATA%\.config\Fidalgo\` (`GetDefaultBaseDir()`) if a document is not yet migrated, logging an `Information` message noting the legacy path. When `ProfileDirectory` (or test `baseDir`) is explicitly supplied, **only** that directory is searched to guarantee test isolation.
    - Extend `UserProfileConfig` / `config.json` schema (all optional, additive, backward-compatible):
      ```json
      {
@@ -129,7 +133,7 @@ Adopt **Option A (`Markdig` [BSD-2-Clause] + HTML/CSS print template + `Microsof
        }
      }
      ```
-   - `Fidalgo.Host/Program.cs` currently omits `builder.Configuration.AddUserProfileConfig();`. Adding it (gated by a test-friendly `UseUserProfileConfig` / `FIDALGO_DISABLE_USER_PROFILE_CONFIG` check, plus `ApplicationPacket:ProfileDirectory` override) gives the web host `config.json` defaults while keeping `WebApplicationFactory<Program>` tests isolated from developer files in `%APPDATA%\.config\Fidalgo\`.
+   - `Fidalgo.Host/Program.cs` currently omits `builder.Configuration.AddUserProfileConfig();`. Adding it (gated by a test-friendly `UseUserProfileConfig` / `FIDALGO_DISABLE_USER_PROFILE_CONFIG` check, plus `ApplicationPacket:ProfileDirectory` override) gives the web host `config.json` defaults while keeping `WebApplicationFactory<Program>` tests isolated from real `Documents\Fidalgo\` and `%APPDATA%\.config\Fidalgo\` files.
 
 2. **Fixing Zero-Argument CLI Short-Circuit & Boolean Flag Binding in `Fidalgo.Agent` and `Fidalgo.Ingest`:**
    - Currently both `Fidalgo.Agent/Program.cs:30` and `Fidalgo.Ingest/Program.cs:31` execute:
@@ -178,8 +182,13 @@ Following `AGENTS.md` ("One class, struct, record or interface per file") and `c
 
 #### Namespace `Fidalgo.Shared.UserProfile` & `Fidalgo.Shared.Models`
 - Extend `UserProfilePaths.cs`:
+  - Keep `GetDefaultBaseDir()` (`%APPDATA%\.config\Fidalgo`) for `config.json` (`UserProfileConfig`) and legacy document fallback.
   - Add `public const string ApplicationsDirectoryName = "applications";`
-  - Add `public static string GetDefaultApplicationsDir() => Path.Combine(GetDefaultBaseDir(), ApplicationsDirectoryName);`
+  - Add `public static string GetDefaultDocumentsDir()` returning `Path.Combine(documentsDir, "Fidalgo")` where `documentsDir = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)` with fallback to `Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Documents")` when `MyDocuments` is empty (e.g., minimal containers).
+  - Add `public static string GetDefaultApplicationsDir() => Path.Combine(GetDefaultDocumentsDir(), ApplicationsDirectoryName);`
+- Update `UserProfileResolver.cs`:
+  - Default resolution (`baseDir is null`) searches `UserProfilePaths.GetDefaultDocumentsDir()` (`Documents\Fidalgo\`) first, and falls back to `UserProfilePaths.GetDefaultBaseDir()` (`%APPDATA%\.config\Fidalgo\`) with an `Information` log message when a document is loaded from the legacy config directory.
+  - Explicit `baseDir` (from `ApplicationPacketOptions.ProfileDirectory` or unit tests) searches **only** `baseDir` (no fallback to `%APPDATA%\.config\Fidalgo\`), preserving strict test isolation.
 - **`UserProfileLoadOverrides`** (`Models/UserProfileLoadOverrides.cs`)
   - Immutable record: `string? ResumePath = null`, `string? CareerStoryPath = null`, `string? CareerGoalsPath = null`, `string? ResumeContentOverride = null`, `string? CareerStoryContentOverride = null`, `string? CareerGoalsContentOverride = null`, `string? OutputDirectoryOverride = null`.
 - **`ProfileSourceMetadata`** (`Models/ProfileSourceMetadata.cs`)
@@ -193,7 +202,7 @@ Following `AGENTS.md` ("One class, struct, record or interface per file") and `c
         UserProfileLoadOverrides? overrides = null,
         CancellationToken cancellationToken = default);
     ```
-  - Resolves `resume.md`, `career-story.md`, and `career-goals.md` via `UserProfileResolver` (rooted at `ApplicationPacketOptions.ProfileDirectory ?? UserProfilePaths.GetDefaultBaseDir()`), applies path or inline Markdown overrides (inline override wins over file path), reads files asynchronously, and throws `Fidalgo.Shared.ErrorHandling.ValidationException` (error key `"baseResume"`) when neither a default `resume.md` nor an override exists.
+  - Resolves `resume.md`, `career-story.md`, and `career-goals.md` via `UserProfileResolver` (configured with `ApplicationPacketOptions.ProfileDirectory` when set, otherwise `Documents\Fidalgo\` with legacy `.config\Fidalgo\` fallback), applies path or inline Markdown overrides (inline override wins over file path), reads files asynchronously, and throws `Fidalgo.Shared.ErrorHandling.ValidationException` (error key `"baseResume"`) when neither a profile `resume.md` nor an override exists.
 
 #### Namespace `Fidalgo.Shared.Pdf`
 - **`IPdfRenderer`** (`Pdf/IPdfRenderer.cs`)
@@ -242,7 +251,7 @@ Following `AGENTS.md` ("One class, struct, record or interface per file") and `c
     Task<ApplicationPacketResult> GenerateForJobAsync(JobEntity job, ApplicationPacketGenerationRequest request, CancellationToken cancellationToken = default);
     ```
   - `GenerateForJobAsync(Guid, ...)` fetches via `JobRepository.GetByIdAsync` and **explicitly checks `job is null || job.IsDeleted`** (throwing `NotFoundException`, because `JobRepository.GetByIdAsync` does not filter `IsDeleted`).
-  - Orchestrates: compute `effectiveForce = request.ForceRegenerate || !request.SkipExisting` → resolve `baseOutputDir` from `request.ProfileOverrides?.OutputDirectoryOverride`, `ApplicationPacketOptions.OutputDirectory`, `ApplicationPacketOptions.ProfileDirectory`, or `UserProfilePaths.GetDefaultApplicationsDir()` → check `IApplicationPacketStore.GetStatusAsync` (if complete and `!effectiveForce`, return `SkippedExisting` immediately with zero profile-file reads, LLM calls, or PDF renders) → load profile (`IUserProfileLoader.LoadAsync`) → generate `resume.md` & `cover-letter.md` (`ITextGenerator`) → render `resume.pdf` & `cover-letter.pdf` (`IPdfRenderer`) → build `job-posting.md` → atomically save (`IApplicationPacketStore.SavePacketAsync`).
+  - Orchestrates: compute `effectiveForce = request.ForceRegenerate || !request.SkipExisting` → resolve `baseOutputDir` from `request.ProfileOverrides?.OutputDirectoryOverride`, `ApplicationPacketOptions.OutputDirectory`, `Path.Combine(ApplicationPacketOptions.ProfileDirectory, "applications")` (when `ProfileDirectory` is set), or `UserProfilePaths.GetDefaultApplicationsDir()` → check `IApplicationPacketStore.GetStatusAsync` (if complete and `!effectiveForce`, return `SkippedExisting` immediately with zero profile-file reads, LLM calls, or PDF renders) → load profile (`IUserProfileLoader.LoadAsync`) → generate `resume.md` & `cover-letter.md` (`ITextGenerator`) → render `resume.pdf` & `cover-letter.pdf` (`IPdfRenderer`) → build `job-posting.md` → atomically save (`IApplicationPacketStore.SavePacketAsync`).
 - **`ApplicationPacketServiceCollectionExtensions`** (`ApplicationPackets/ApplicationPacketServiceCollectionExtensions.cs`)
   - `AddApplicationPacketServices(this IServiceCollection services, IConfiguration configuration)` registers `ApplicationPacketOptions`, `UserProfileResolver`, `IUserProfileLoader`, `IPdfRenderer` (singleton `PlaywrightPdfRenderer`), `IApplicationPacketStore`, and `IApplicationPacketService`.
 - **`CliArgumentNormalizer`** (`Configuration/CliArgumentNormalizer.cs`)
@@ -266,14 +275,14 @@ Following `AGENTS.md` ("One class, struct, record or interface per file") and `c
    - *(Existing `--Resume`, `--CareerStory`, `--CareerGoals`, `--Email` are reused directly.)*
 
 2. **`Program.cs` & `AgentRunner.cs`** (Addressing `audit-2026-07-30.md` Program testability finding):
-   - Keep `--help` / `-h` pre-host in `Program.cs` (so help prints and exits `0` before `ValidateOnStart()` requires `Email`).
+   - Keep `--help` / `-h` pre-host in `Program.cs` (so help prints and exits `0` before `ValidateOnStart()` requires `Email`), and update `--help` text + missing-resume error messages to reference `Documents\Fidalgo\` (and `%APPDATA%\.config\Fidalgo\config.json` for configuration).
    - Remove `args.Length == 0` from the help guard. Normalize bare boolean flags with `CliArgumentNormalizer.NormalizeBooleanFlags` before `AddCommandLine(args)`. Wrap `IOptions<CliOptions>.Value` / `host.StartAsync()` in `try / catch (OptionsValidationException)` so zero-arg execution with missing `config.json` prints clear setup guidance + usage and returns `1`.
    - Extract CLI mode dispatch into an injectable `AgentRunner` class (`Task<int> RunAsync(CliOptions options, CancellationToken cancellationToken = default)`), replacing blocking `.Result` / `.Wait()` calls with `await`.
    - **Execution modes:**
      - Zero CLI args (`args.Length == 0` with valid `config.json`): runs default evaluation mode (and if `ApplicationPacket:AutoGenerateForApply` is `true`, automatically chains into batch packet generation for `"Apply"` jobs!).
      - `--QueryJobs`, `--DiscardJobId`, `--ListDiscarded` → unchanged behavior, async.
      - `--GeneratePackets` or `--TargetJobId <guid>`:
-       - Requires `resume.md` (via `--Resume` or default `%APPDATA%\.config\Fidalgo\resume.md`).
+       - Requires `resume.md` (via `--Resume`, `Documents\Fidalgo\resume.md`, or legacy `%APPDATA%\.config\Fidalgo\resume.md`).
        - Builds `ApplicationPacketGenerationRequest` with `ForceRegenerate = options.ForceRegenerate || options.SkipExisting == false`, `SkipExisting = options.SkipExisting ?? true`, and `UserProfileLoadOverrides` (`ResumePath`, `CareerStoryPath`, `CareerGoalsPath`, `OutputDirectoryOverride`).
        - If `--TargetJobId` is set: fetch single job via `JobRepository.GetByIdAsync`; **explicitly check `job is null || job.IsDeleted`** and return exit code `1` if missing/deleted; otherwise generate packet.
        - Else (batch mode): query non-deleted jobs for `options.Email` matching effective `RecommendationFilter` (comma-separated tiers supported e.g. `"Apply,Maybe"`). Iterate deterministically:
@@ -344,20 +353,22 @@ Refactor the resume modal in `src/Fidalgo.Frontend/src/App.tsx` (extracting clea
 
 ---
 
-### 4.6 `wiki/architecture/` Update Plan
+### 4.6 Documentation & `wiki/architecture/` Update Plan
 
-Per `AGENTS.md` ("Always _maintain_ Architecture Memory in the ./wiki/architecture/ folder when work is performed"), once implementation begins/completes, the following Architecture Memory artifacts will be updated:
+Per `AGENTS.md` ("Always _maintain_ Architecture Memory in the ./wiki/architecture/ folder when work is performed"), once implementation begins/completes, the following documentation and Architecture Memory artifacts will be updated:
 
-1. **`wiki/architecture/architecture-summary.md`**:
+1. **`README.md`**:
+   - Update user setup instructions to reflect `Documents\Fidalgo\` for user profile documents (`resume.md`, `career-story.md`, `career-goals.md`) and `Documents\Fidalgo\applications\<job-folder>\` for generated application packets, while keeping `config.json` in `%APPDATA%\.config\Fidalgo\config.json` and `jobs.db` / `logs\` in `%APPDATA%\fidalgo\`.
+2. **`wiki/architecture/architecture-summary.md`**:
    - Replace `QuestPDF` with `Markdig` (BSD-2-Clause) + `Microsoft.Playwright` Chromium `Page.PdfAsync` (Apache-2.0) behind `IPdfRenderer`.
    - Update Web UI description from Razor Pages to ASP.NET Core Minimal API (`Fidalgo.Host`) + React/Vite (`Fidalgo.Frontend`).
-   - Document `ApplicationPacketService`, `ITextGenerator`, `IUserProfileLoader`, and the `%APPDATA%\.config\Fidalgo\applications\<job-folder>\` output structure (`resume.pdf`, `cover-letter.pdf`, `job-posting.md`).
+   - Document `ApplicationPacketService`, `ITextGenerator`, `IUserProfileLoader`, `Documents\Fidalgo\` for profile documents (with legacy fallback to `%APPDATA%\.config\Fidalgo\`), `Documents\Fidalgo\applications\<job-folder>\` output structure (`resume.pdf`, `cover-letter.pdf`, `job-posting.md`), and `%APPDATA%\.config\Fidalgo\config.json` strictly for user configuration.
    - Document `Fidalgo.Agent` batch packet flags (`--GeneratePackets`, `--TargetJobId`, `--ForceRegenerate`, `--SkipExisting`, `--OutputDir`).
-2. **`wiki/architecture/c4-container.puml` & `wiki/architecture/c4-component.puml`**:
+3. **`wiki/architecture/c4-container.puml` & `wiki/architecture/c4-component.puml`**:
    - Align container/component diagrams with the actual 4-project topology (`Fidalgo.Ingest`, `Fidalgo.Agent`, `Fidalgo.Host`, `Fidalgo.Frontend`, `Fidalgo.Shared`).
-   - Add `ApplicationPacketService`, `ITextGenerator` (`OpenAiTextGenerator`), `IPdfRenderer` (`PlaywrightPdfRenderer`), `IApplicationPacketStore`, and `User File Store` (`applications/`).
-3. **`wiki/architecture/er-diagram.md`**:
-   - Document that application packet files live deterministically on the filesystem keyed by `JOB.InternalId` slug (`applications/<employer>_<title>_<short-id>/`) with no SQLite schema change required in v1.
+   - Add `ApplicationPacketService`, `ITextGenerator` (`OpenAiTextGenerator`), `IPdfRenderer` (`PlaywrightPdfRenderer`), `IApplicationPacketStore`, and `User File Store` (`Documents\Fidalgo\` + `applications/`).
+4. **`wiki/architecture/er-diagram.md`**:
+   - Document that application packet files live deterministically on the filesystem keyed by `JOB.InternalId` slug (`Documents\Fidalgo\applications\<employer>_<title>_<short-id>\`) with no SQLite schema change required in v1.
 
 ---
 
@@ -397,9 +408,10 @@ All tests follow `AGENTS.md` (`NSubstitute` for mocking, `Nullable` enabled, `Tr
 - **`ApplicationPacketPathsTests` & `CliArgumentNormalizerTests`:**
   - Deterministic folder naming (`{employer}_{title}_{shortId}`), identical prefix disambiguation via `InternalId`, Windows invalid character stripping (`\ / : * ? " < > |`), Windows reserved device name handling (`CON`, `NUL`), nullable `Title` fallback, max length truncation, and path containment checks including drive-root `baseOutputDir`.
   - Bare CLI flag normalization (`--GeneratePackets --OutputDir x` → `--GeneratePackets=true --OutputDir x`) without breaking `--QueryJobs true` or `--SkipExisting false`.
-- **`UserProfileLoaderTests`:**
-  - Fallback loading from `%APPDATA%\.config\Fidalgo\` defaults (`resume.md`, `career-story.md`, `career-goals.md`) using temp directories.
-  - CLI/request overrides winning over defaults; `ValidationException` raised with `"baseResume"` error when `resume.md` is missing and no override provided.
+- **`UserProfilePathsTests`, `UserProfileResolverTests` & `UserProfileLoaderTests`:**
+  - `GetDefaultDocumentsDir()` returns `Documents\Fidalgo` (`MyDocuments` or `UserProfile/Documents` fallback when `MyDocuments` is empty), `GetDefaultApplicationsDir()` returns `Documents\Fidalgo\applications`, and `GetDefaultBaseDir()` remains `%APPDATA%\.config\Fidalgo` for `config.json`.
+  - Default resolution checks `Documents\Fidalgo\` first, falls back to `.config\Fidalgo\` with an `Information` log note when found there, and honors strict isolation (single directory only) when `ProfileDirectory` / test `baseDir` is explicitly supplied.
+  - CLI/request overrides win over defaults; `ValidationException` raised with `"baseResume"` error when `resume.md` is missing and no override provided.
 - **`PromptBuildersTests` (`ResumeTailoringPromptBuilder`, `CoverLetterPromptBuilder`, `MarkdownResponseNormalizer`, `JobPostingSnapshotBuilder`):**
   - Pure-function verification that `job.Description`, `job.ResumeHints`, `job.Pros`, `resume.md`, `career-story.md`, and `career-goals.md` are included when present, omitted cleanly when null/whitespace, anti-fabrication instructions are present, and `MarkdownResponseNormalizer` strips ` ```markdown ` fences.
 - **`FileSystemApplicationPacketStoreTests`:**
