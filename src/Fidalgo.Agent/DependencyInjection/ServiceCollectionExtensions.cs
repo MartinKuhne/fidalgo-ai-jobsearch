@@ -59,11 +59,10 @@ public static class ServiceCollectionExtensions
             return client;
         });
 
-        // Adzuna Configuration
+        // Adzuna Configuration (bound on demand; not required for evaluation or packet modes)
         services.AddOptions<AdzunaConfiguration>()
             .BindConfiguration("Adzuna")
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
+            .ValidateDataAnnotations();
 
         // Tools
         services.AddScoped<SaveJobTool>();
@@ -76,6 +75,9 @@ public static class ServiceCollectionExtensions
 
         // Configuration
         services.AddSingleton<CliOptions>();
+
+        // Runners
+        services.AddScoped<AgentRunner>();
 
         return services;
     }

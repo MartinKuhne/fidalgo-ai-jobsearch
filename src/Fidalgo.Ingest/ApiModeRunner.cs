@@ -26,16 +26,17 @@ public class ApiModeRunner
         _logger = logger;
     }
 
-    public async Task RunAsync(CliOptions options)
+    public async Task RunAsync(CliOptions options, CancellationToken cancellationToken = default)
     {
         int page = 1;
         while (true)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (page > 1)
             {
-                await Task.Delay(1000);
+                await Task.Delay(1000, cancellationToken);
             }
-            var jobs = await _jobSearchTool.SearchRawAsync(options.Keywords, options.ZipCode, page: page);
+            var jobs = await _jobSearchTool.SearchRawAsync(options.Keywords, options.ZipCode, page: page, cancellationToken: cancellationToken);
             
             if (jobs == null || jobs.Results.Count == 0)
             {
@@ -46,7 +47,7 @@ public class ApiModeRunner
             
             foreach (var job in jobs.Results)
             {
-                var exists = await _jobInDbTool.ContainsAsync(options.Email, "adzuna", job.Id ?? string.Empty);
+                var exists = await _jobInDbTool.ContainsAsync(options.Email, "adzuna", job.Id ?? string.Empty, cancellationToken);
                 if (!exists && !string.IsNullOrEmpty(job.RedirectUrl))
                 {
                     _logger.LogInformation("Saving job {JobId} from {Url}", job.Id, job.RedirectUrl);
@@ -61,10 +62,11 @@ public class ApiModeRunner
                         job.SalaryMin,
                         job.SalaryMax,
                         job.RedirectUrl,
-                        "adzuna"
+                        "adzuna",
+                        cancellationToken: cancellationToken
                     );
 
-                    await Task.Delay(1000);
+                    await Task.Delay(1000, cancellationToken);
                 }
                 else if (exists)
                 {
