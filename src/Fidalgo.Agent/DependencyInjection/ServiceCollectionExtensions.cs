@@ -30,7 +30,7 @@ public static class ServiceCollectionExtensions
         services.AddAgentLogging();
 
         // Database
-        var path = databasePath ?? Constants.GetDefaultDatabasePath();
+        var path = string.IsNullOrWhiteSpace(databasePath) ? Constants.GetDefaultDatabasePath() : databasePath;
         services.AddDbContext<JobDbContext>(options =>
             options.UseSqlite($"Data Source={path}"));
 

@@ -140,4 +140,56 @@ public class FileSystemApplicationPacketStoreTests : IDisposable
 
         Assert.Null(stream);
     }
+
+    [Fact]
+    public async Task SavePacketAsync_SerializesConcurrentWritesToSameJobFolder_AndAllowsOpenReadStreamOverwrite()
+    {
+        var initial = new ApplicationPacketWriteRequest(
+            ResumePdfBytes: "%PDF-1.4\ninitial"u8.ToArray(),
+            CoverLetterPdfBytes: "%PDF-1.4\ninitial-cover"u8.ToArray(),
+            JobPostingMarkdown: "# Initial",
+            ResumeMarkdown: "# Initial Resume",
+            CoverLetterMarkdown: "# Initial Cover",
+            ModelName: "test-model",
+            ForceRegenerated: false);
+
+        var files = await _sut.SavePacketAsync(_tempDir, _job, initial);
+
+        var openReadStream = await _sut.OpenPacketFileAsync(_tempDir, _job, ApplicationPacketPaths.ResumePdfFileName);
+        Assert.NotNull(openReadStream);
+
+        try
+        {
+            var tasks = Enumerable.Range(1, 8).Select(i =>
+                _sut.SavePacketAsync(
+                    _tempDir,
+                    _job,
+                    new ApplicationPacketWriteRequest(
+                        ResumePdfBytes: Encoding.UTF8.GetBytes($"%PDF-1.4\nresume-{i}"),
+                        CoverLetterPdfBytes: Encoding.UTF8.GetBytes($"%PDF-1.4\ncover-{i}"),
+                        JobPostingMarkdown: $"# Posting {i}",
+                        ResumeMarkdown: $"# Resume {i}",
+                        CoverLetterMarkdown: $"# Cover {i}",
+                        ModelName: "test-model",
+                        ForceRegenerated: true)));
+
+            await Task.WhenAll(tasks);
+
+            using var reader = new StreamReader(openReadStream!, Encoding.UTF8, leaveOpen: true);
+            var originalContent = await reader.ReadToEndAsync();
+            Assert.Equal("%PDF-1.4\ninitial", originalContent);
+        }
+        finally
+        {
+            await openReadStream!.DisposeAsync();
+        }
+
+        var leftoverTempFiles = Directory.GetFiles(files.DirectoryPath, "*.tmp-*");
+        Assert.Empty(leftoverTempFiles);
+        var leftoverDisplacedFiles = Directory.GetFiles(files.DirectoryPath, "*.old-*");
+        Assert.Empty(leftoverDisplacedFiles);
+
+        var status = await _sut.GetStatusAsync(_tempDir, _job);
+        Assert.True(status.Exists);
+    }
 }

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -31,6 +32,21 @@ public class TracingHttpMessageHandler : DelegatingHandler
             var traceId = traceContext.TraceId.PadLeft(32, '0');
             var spanId = traceContext.SpanId.PadLeft(16, '0');
             request.Headers.TryAddWithoutValidation("traceparent", $"00-{traceId}-{spanId}-01");
+        }
+        else
+        {
+            var activity = Activity.Current;
+            if (activity is not null && activity.TraceId != default && activity.SpanId != default)
+            {
+                request.Headers.TryAddWithoutValidation(
+                    "traceparent",
+                    $"00-{activity.TraceId}-{activity.SpanId}-01");
+
+                if (!string.IsNullOrWhiteSpace(activity.TraceStateString))
+                {
+                    request.Headers.TryAddWithoutValidation("tracestate", activity.TraceStateString);
+                }
+            }
         }
 
         return await base.SendAsync(request, cancellationToken);

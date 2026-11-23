@@ -1,6 +1,7 @@
 using Fidalgo.Shared.Configuration;
 using Fidalgo.Shared.Logging;
 using Fidalgo.Shared.Pdf;
+using Fidalgo.Shared.Tracing;
 using Fidalgo.Shared.UserProfile;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -28,6 +29,8 @@ public static class ApplicationPacketServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
 
+        FidalgoTracingListener.EnsureRegistered();
+
         services.AddOptions<ApplicationPacketOptions>()
             .Bind(configuration.GetSection(ApplicationPacketOptions.ConfigurationSectionName))
             .ValidateDataAnnotations()
@@ -50,22 +53,11 @@ public static class ApplicationPacketServiceCollectionExtensions
 
         services.AddSingleton<IUserProfileLoader, UserProfileLoader>();
 
-        services.AddSingleton<IPdfRenderer>(sp =>
-        {
-            var handler = new TracingHttpMessageHandler(sp.GetRequiredService<ITraceContextProvider>())
-            {
-                InnerHandler = new SocketsHttpHandler()
-            };
-            var httpClient = new HttpClient(handler)
-            {
-                Timeout = Timeout.InfiniteTimeSpan
-            };
-
-            return new MdToPdfRenderer(
-                httpClient,
-                sp.GetRequiredService<IOptions<ApplicationPacketOptions>>(),
-                sp.GetRequiredService<ILogger<MdToPdfRenderer>>());
-        });
+        services.TryAddSingleton<OwnedMdToPdfHttpClient>();
+        services.AddSingleton<IPdfRenderer>(sp => new MdToPdfRenderer(
+            sp.GetRequiredService<OwnedMdToPdfHttpClient>().Client,
+            sp.GetRequiredService<IOptions<ApplicationPacketOptions>>(),
+            sp.GetRequiredService<ILogger<MdToPdfRenderer>>()));
 
         services.AddSingleton<IApplicationPacketStore, FileSystemApplicationPacketStore>();
         services.AddScoped<IApplicationPacketService, ApplicationPacketService>();

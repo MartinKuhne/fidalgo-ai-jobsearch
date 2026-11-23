@@ -257,6 +257,32 @@ public class ApplicationPacketServiceTests : IDisposable
         Assert.IsType<ApplicationPacketService>(scope.ServiceProvider.GetRequiredService<IApplicationPacketService>());
     }
 
+    [Fact]
+    public async Task AddApplicationPacketServices_DisposesOwnedMdToPdfHttpClient_OnContainerShutdown()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ApplicationPacket:ProfileDirectory"] = _profileDir,
+                ["ApplicationPacket:OutputDirectory"] = _outputDir
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddApplicationPacketServices(config);
+
+        OwnedMdToPdfHttpClient ownedClient;
+        using (var provider = services.BuildServiceProvider())
+        {
+            ownedClient = provider.GetRequiredService<OwnedMdToPdfHttpClient>();
+            Assert.NotNull(provider.GetRequiredService<IPdfRenderer>());
+        }
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
+            ownedClient.Client.GetAsync("http://127.0.0.1:1/"));
+    }
+
     private void SetupCompleteGenerationMocks(JobEntity job)
     {
         _profileLoader.LoadAsync(Arg.Any<UserProfileLoadOverrides?>(), Arg.Any<CancellationToken>()).Returns(CreateSampleProfile());

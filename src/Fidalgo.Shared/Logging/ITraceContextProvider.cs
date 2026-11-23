@@ -11,6 +11,6 @@ public interface ITraceContextProvider
     /// <summary>Returns the current trace context, or null if none is set.</summary>
     TraceContext? GetCurrentContext();
 
-    /// <summary>Sets the current trace context for the async flow.</summary>
-    void SetCurrentContext(TraceContext context);
+    /// <summary>Sets the current trace context for the async flow, or clears it when <c>null</c>.</summary>
+    void SetCurrentContext(TraceContext? context);
 }

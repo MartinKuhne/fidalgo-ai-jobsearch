@@ -5,5 +5,4 @@ namespace Fidalgo.Shared.Models;
 /// </summary>
 public sealed record PdfRenderOptions(
     PdfDocumentKind Kind,
-    string DocumentTitle,
     string PageSize = "Letter");
