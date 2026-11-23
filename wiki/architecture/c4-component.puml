@@ -8,87 +8,70 @@ skinparam rectangle {
     ArrowColor #333333
 }
 
-title C4 Component Diagram - Fidalgo JobSearch AI
+title C4 Component Diagram - Fidalgo Application Packet Extension
 
-' === Background Service Components ===
-
-package "Background Service" #LightBlue {
-
-    component [Scheduler] as scheduler
-    component [JobScrapeOrchestrator] as orchestrator
-    component [JobBoardScraper] as scraper
-    component [SkillExtractAgent] as skill_agent
-    component [MatchEngine] as match_engine
-    component [EmailService] as email_service
-    component [EmailReportBuilder] as report_builder
-    component [ResumeCustomizer] as resume_customizer
-    component [PdfGenerator] as pdf_generator
-
-    scheduler --> orchestrator : triggers every 4h
-    scheduler --> email_service : triggers daily 05:00
-
-    orchestrator --> scraper : for each board
-    orchestrator --> skill_agent : sends job descriptions
-
-    scraper --> scraper : reads detail pages
-    scraper --> orchestrator : returns URLs + content
-
-    skill_agent --> match_engine : returns tech + interp skills
-
-    match_engine --> match_engine : computes overlap %
-    match_engine --> orchestrator : returns suitability rating
-
-    email_service --> report_builder : builds ranked list
-    report_builder --> resume_customizer : per job
-    resume_customizer --> pdf_generator : generates tailored PDF
-    pdf_generator --> email_service : returns PDF bytes
+package "CLI Entry Points" #LightBlue {
+    component [Fidalgo.Ingest\nProgram / ApiModeRunner] as ingest_runner
+    component [Fidalgo.Agent\nProgram / AgentRunner] as agent_runner
+    component [JobEvaluationAgent] as eval_agent
 }
 
-' === Web UI Components ===
-
-package "Web UI (Razor Pages)" #LightGreen {
-
-    component [JobListPage] as job_list
-    component [JobDetailPage] as job_detail
-    component [JobFilterService] as filter_service
-    component [JobActionService] as action_service
-    component [UserPreferencePage] as pref_page
-
-    job_list --> filter_service : applies date + rating filters
-    job_detail --> action_service : marks applied / discarded
-    pref_page --> action_service : updates preferences
+package "Web Presentation (Fidalgo.Host & Fidalgo.Frontend)" #LightGreen {
+    component [React SPA\n(App / ApplicationPacketModal)] as spa
+    component [Minimal API Endpoints\n(/api/jobs, /api/profile/defaults,\n/api/jobs/{id}/packet*)] as api
+    component [GlobalExceptionHandler\n(ProblemDetails)] as err_handler
+    component [JobsService / TenantService] as host_services
 }
 
-' === Data Layer ===
-
-package "Data Layer" #LightGray {
-
-    component [DbContext] as db_context
-    component [JobRepository] as job_repo
-    component [UserRepository] as user_repo
-    component [SQLite] as sqlite
-
-    job_repo --> db_context : EF Core queries
-    user_repo --> db_context : EF Core queries
-    db_context --> sqlite : persists data
+package "Fidalgo.Shared Core Services" #LightYellow {
+    component [UserProfileResolver &\nUserProfileLoader] as profile_loader
+    component [ApplicationPacketService] as packet_service
+    component [Prompt Builders &\nJobPostingSnapshotBuilder] as prompt_builders
+    component [OpenAiTextGenerator\n(ITextGenerator + Polly)] as text_gen
+    component [MdToPdfRenderer\n(IPdfRenderer + PdfCssProvider)] as pdf_renderer
+    component [FileSystemApplicationPacketStore &\nApplicationPacketPaths] as packet_store
+    component [JobRepository / JobDbContext] as job_repo
 }
 
-' === External ===
+package "Local Filesystem & SQLite" #LightGray {
+    database "jobs.db\n(%APPDATA%\\fidalgo)" as sqlite
+    folder "config.json\n(%APPDATA%\\.config\\Fidalgo)" as config_dir
+    folder "Documents\\Fidalgo\\\n(resume, story, goals,\napplications\\<job>\\)" as docs_dir
+}
 
-System_Ext(job_boards, "Job Boards", "External sources")
 System_Ext(local_llm, "Local LLM\n192.168.1.21:8080", "OpenAI-compatible API")
-System_Ext(smtp, "SMTP Server", "Email relay")
+System_Ext(md_to_pdf, "spawnia/md-to-pdf\nlocalhost:8000", "WeasyPrint HTTP API")
+System_Ext(adzuna, "Adzuna / Job Boards", "External job sources")
 
-' === Connections ===
+spa --> api : JSON & PDF/MD streams
+api --> err_handler : maps exceptions\n(400/401/404/502/500)
+api --> host_services : queries jobs & tenants
+api --> profile_loader : GET /api/profile/defaults
+api --> packet_service : POST /api/jobs/{id}/packet
+api --> packet_store : GET packet status & files
 
-Rel(scraper, job_boards, "Playwright\nheadless scraping")
-Rel(skill_agent, local_llm, "POST /v1/\nchat/completions")
-Rel(email_service, smtp, "SMTP\nTLS encrypted")
+ingest_runner --> adzuna : fetches job postings
+ingest_runner --> job_repo : upserts JobEntity
 
-Rel(orchestrator, job_repo, "upserts jobs")
-Rel(match_engine, job_repo, "reads user profile")
-Rel(job_list, job_repo, "queries jobs")
-Rel(job_detail, job_repo, "updates job")
-Rel(action_service, user_repo, "reads/writes\npreferences")
+agent_runner --> eval_agent : evaluates untriaged jobs
+agent_runner --> packet_service : batch / target-job\npacket generation
+eval_agent --> job_repo : updates Score, Pros,\nCons, ResumeHints
+eval_agent --> local_llm : tool-calling evaluation
+
+packet_service --> job_repo : reads JobEntity\n(checks IsDeleted)
+packet_service --> profile_loader : loads resume, story, goals
+packet_service --> prompt_builders : builds prompts &\njob-posting.md
+packet_service --> text_gen : tailored resume &\ncover letter Markdown
+packet_service --> pdf_renderer : renders resume.pdf &\ncover-letter.pdf
+packet_service --> packet_store : atomic staging save
+
+host_services --> job_repo : reads/soft-deletes jobs
+job_repo --> sqlite : EF Core SQLite
+profile_loader --> config_dir : legacy fallback &\nconfig defaults
+profile_loader --> docs_dir : reads profile .md
+packet_store --> docs_dir : reads/writes\napplications\\<job>\\
+
+text_gen --> local_llm : HTTP POST + Polly retry
+pdf_renderer --> md_to_pdf : HTTP POST (markdown,\ncss, engine=weasyprint)
 
 @enduml
