@@ -24,11 +24,8 @@ public class ProgramTests : IClassFixture<WebApplicationFactory<Program>>
         // Act
         var response = await client.GetAsync("/api/jobs?page=1&pageSize=10");
 
-        // Assert - should be 400 Bad Request since email is required by minimal API framework (non-nullable string or required query param)
-        // Wait, the API endpoint defines it as `[FromQuery] string email`. If missing, it might throw or return 400.
-        // Actually if not provided, the route might return 400, or the service might throw ArgumentException which becomes 500 without a global exception handler.
-        // Let's just check the response is not success, or check it explicitly.
-        Assert.False(response.IsSuccessStatusCode);
+        // Assert - should be 400 Bad Request since email is required by minimal API framework
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
     
     [Fact]

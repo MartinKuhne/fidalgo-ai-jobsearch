@@ -10,49 +10,39 @@ skinparam rectangle {
 
 title C4 Container Diagram - Fidalgo JobSearch AI
 
-System_Boundary(fidalgo, "Fidalgo Container") {
+System_Boundary(fidalgo, "Fidalgo JobSearch AI") {
 
-    Container(web_ui, "Web UI", "Razor Pages", "Allows users to browse jobs, filter by date and rating, and mark jobs as applied or discarded. REQ-WEB-001..006")
+    Container(frontend, "Web UI", "React 19 + TypeScript + Vite", "Job triage table, profile readiness display, application packet generator modal, and inline PDF/Markdown preview & download.")
 
-    Container(background_service, "Background Service", "C# .NET 10 Hosted Service", "Runs the periodic job-scraping scheduler (every 4h) and the daily 05:00 email dispatch. REQ-001, REQ-004, REQ-012")
+    Container(web_host, "Web Host API", "C# .NET 10 ASP.NET Core Minimal API", "Serves static SPA, exposes /api/jobs, /api/tenants, /api/profile/defaults, and /api/jobs/{id}/packet endpoints with GlobalExceptionHandler.")
 
-    Container(scrape_agent, "Job Scrape Agent", "C# + Playwright", "Launches headless browsers to scrape job boards for 'software engineer' and 'software engineering manager'. Extracts listing URLs and reads detail pages. REQ-004")
+    Container(ingest_cli, "Fidalgo.Ingest", "C# .NET 10 CLI", "Discovers job postings via Adzuna API (ApiModeRunner) or Playwright Firefox scraping (JobSearchAgent). Supports zero-flag config.json execution.")
 
-    Container(skill_agent, "Skill Extract Agent", "C# + OpenAI Client", "Sends job descriptions to the local LLM for extraction of top 10 technical and top 10 interpersonal skills. REQ-008, REQ-009")
+    Container(agent_cli, "Fidalgo.Agent", "C# .NET 10 CLI", "Evaluates untriaged jobs (JobEvaluationAgent) and generates batch or single-job application packets (AgentRunner).")
 
-    Container(match_engine, "Match Engine", "C#", "Computes skill overlap between user resume/narrative and employer job skills. Produces a suitability percentage. REQ-010")
+    Container(shared_core, "Fidalgo.Shared", "C# .NET 10 Class Library", "Shared JobRepository, UserProfileLoader, ITextGenerator, IPdfRenderer (MdToPdfRenderer), ApplicationPacketService, and FileSystemApplicationPacketStore.")
 
-    Container(email_service, "Email Service", "C# + MailKit", "Generates ranked job reports, triggers resume customization, and sends emails via SMTP. REQ-012, REQ-013")
+    ContainerDb(sqlite_db, "SQLite Database", "EF Core (%APPDATA%\\fidalgo\\jobs.db)", "Persistent store for JobEntity postings, AI evaluation scores/hints, and soft-delete flags.")
 
-    Container(resume_customizer, "Resume Customizer", "C# + QuestPDF", "Generates a job-tailored PDF resume by injecting relevant keywords and highlighting matched skills. REQ-013")
+    ContainerDb(config_store, "User Configuration", "%APPDATA%\\.config\\Fidalgo\\config.json", "Stores default Email, ZipCode, JobSearchKeywords, and ApplicationPacket settings.")
 
-    ContainerDb(sqlite_db, "SQLite Database", "EF Core", "Persistent store for users, job postings, and extracted skills. REQ-007")
-
-    ContainerDb(user_files, "User File Store", "Filesystem", "Stores user resume files and optional career narrative files. REQ-006")
+    ContainerDb(user_docs, "User Documents & Packets", "Documents\\Fidalgo\\", "Stores base resume.md, career-story.md, career-goals.md, and generated per-job packets under applications\\<job-folder>\\.")
 }
 
-System_Ext(job_boards, "Job Boards\n(governmentjobs, Google,\nglassdoor, monster,\nindeed, linkedin)", "External job listing sources")
-System_Ext(local_llm, "Local LLM\n192.168.1.21:8080", "OpenAI-compatible inference server")
-System_Ext(smtp, "SMTP Server", "Outbound email relay")
+System_Ext(adzuna_and_boards, "Adzuna API & Job Boards", "External job search API and web listings")
+System_Ext(local_llm, "Local LLM Server\n(192.168.1.21:8080)", "OpenAI-compatible inference server")
+System_Ext(md_to_pdf, "md-to-pdf Service\n(localhost:8000)", "spawnia/md-to-pdf container (WeasyPrint engine)")
 
-Rel(web_ui, sqlite_db, "reads / updates\njobs, filters\nREQ-WEB-001..006")
-Rel(background_service, scrape_agent, "triggers every 4h")
-Rel(background_service, email_service, "triggers daily 05:00")
+Rel(frontend, web_host, "HTTPS / JSON &\nPDF streams")
+Rel(web_host, shared_core, "uses repositories,\nprofile & packet services")
+Rel(ingest_cli, shared_core, "uses repositories,\nfetch tools & config")
+Rel(agent_cli, shared_core, "uses repositories,\nLLM & packet services")
 
-Rel(scrape_agent, job_boards, "headless browser\nscraping REQ-004")
-Rel(scrape_agent, skill_agent, "sends job descriptions")
-
-Rel(skill_agent, local_llm, "POST /v1/chat/completions\nREQ-100")
-
-Rel(skill_agent, match_engine, "returns extracted skills")
-Rel(match_engine, user_files, "reads resume\nand narrative REQ-006")
-Rel(match_engine, sqlite_db, "stores job record\nwith rating REQ-011")
-
-Rel(email_service, match_engine, "queries top jobs\nby suitability")
-Rel(email_service, resume_customizer, "requests tailored PDF\nper job REQ-013")
-Rel(email_service, smtp, "sends email\nREQ-012")
-Rel(email_service, web_ui, "on-demand trigger\nvia API")
-
-Rel(user_files, web_ui, "serves resume\nuploads REQ-006")
+Rel(ingest_cli, adzuna_and_boards, "Adzuna REST API &\nPlaywright Firefox scraping")
+Rel(shared_core, sqlite_db, "EF Core reads/writes")
+Rel(shared_core, config_store, "reads defaults via\nIConfiguration")
+Rel(shared_core, user_docs, "reads profile .md;\nwrites PDFs & job-posting.md")
+Rel(shared_core, local_llm, "POST /v1/chat/completions\n(OpenAiTextGenerator)")
+Rel(shared_core, md_to_pdf, "POST form-urlencoded\n(MdToPdfRenderer)")
 
 @enduml

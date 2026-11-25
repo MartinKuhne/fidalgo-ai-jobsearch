@@ -1,3 +1,4 @@
+using Fidalgo.Shared.ApplicationPackets;
 using Fidalgo.Shared.Models;
 using Fidalgo.Shared.Storage;
 using Microsoft.Extensions.Logging;
@@ -111,7 +112,7 @@ public class JobsService : IJobsService
                     j.SourceWebsite,
                     FormatPay(j.SalaryRangeLow, j.SalaryRangeHigh),
                     j.Description,
-                    GetUrl(j),
+                    JobUrlFormatter.FormatUrl(j),
                     j.Pros + "\n" + j.Cons))
                 .ToList();
 
@@ -190,14 +191,5 @@ public class JobsService : IJobsService
             return $"${low.Value:N0}";
         }
         return string.Empty;
-    }
-
-    private static string GetUrl(JobEntity j)
-    {
-        if (j.SourceWebsite == "adzuna" && !string.IsNullOrEmpty(j.EmployerJobId))
-        {
-            return $"https://www.adzuna.com/details/{j.EmployerJobId}";
-        }
-        return j.SourceWebsite.StartsWith("http") ? j.SourceWebsite : "";
     }
 }

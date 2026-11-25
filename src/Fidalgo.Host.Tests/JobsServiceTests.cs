@@ -119,4 +119,23 @@ public class JobsServiceTests
         Assert.NotNull(result);
         Assert.Equal(id, result!.InternalId);
     }
+
+    [Fact]
+    public async Task GetJobsAsync_FormatsSourceUrlsUsingSharedJobUrlFormatter()
+    {
+        var email = "test@example.com";
+        var jobs = new List<JobEntity>
+        {
+            new JobEntity { InternalId = Guid.NewGuid(), Email = email, Score = 80, Employer = "Acme", Title = "Arch", Recommendation = "Apply", SourceWebsite = "adzuna", EmployerJobId = "12345" },
+            new JobEntity { InternalId = Guid.NewGuid(), Email = email, Score = 70, Employer = "Beta", Title = "Dev", Recommendation = "Apply", SourceWebsite = "https://jobs.beta.example/1" }
+        };
+
+        _repository.QueryAsync(email, Arg.Any<DateTime?>(), Arg.Any<DateTime?>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(jobs));
+
+        var result = await _service.GetJobsAsync(email, page: 1, pageSize: 10);
+
+        Assert.Equal("https://www.adzuna.com/details/12345", result.Items[0].Url);
+        Assert.Equal("https://jobs.beta.example/1", result.Items[1].Url);
+    }
 }

@@ -14,9 +14,27 @@ public static class UserProfileConfig
     /// <summary>File name of the user configuration document.</summary>
     public const string ConfigFileName = "config.json";
 
-    /// <summary>Returns the absolute path of the user configuration file in the default profile directory.</summary>
-    public static string GetDefaultConfigPath() =>
-        Path.Combine(UserProfilePaths.GetDefaultBaseDir(), ConfigFileName);
+    /// <summary>
+    /// Returns the absolute path of the user configuration file.
+    /// Honors <c>FIDALGO_PROFILE_CONFIG_PATH</c> or <c>FIDALGO_CONFIG_DIR</c> when set
+    /// (for containerized deployments), falling back to <c>%APPDATA%\.config\Fidalgo\config.json</c>.
+    /// </summary>
+    public static string GetDefaultConfigPath()
+    {
+        var explicitPath = Environment.GetEnvironmentVariable("FIDALGO_PROFILE_CONFIG_PATH");
+        if (!string.IsNullOrWhiteSpace(explicitPath))
+        {
+            return explicitPath;
+        }
+
+        var configDir = Environment.GetEnvironmentVariable("FIDALGO_CONFIG_DIR");
+        if (!string.IsNullOrWhiteSpace(configDir))
+        {
+            return Path.Combine(configDir, ConfigFileName);
+        }
+
+        return Path.Combine(UserProfilePaths.GetDefaultBaseDir(), ConfigFileName);
+    }
 
     /// <summary>
     /// Adds the user configuration file as an optional, reload-on-change

@@ -2,179 +2,139 @@
 
 ## 1. System Overview
 
-Fidalgo JobSearch AI is a long-running, containerized C# application that periodically scrapes job boards, uses a local OpenAI-compatible LLM to analyze job postings against user profiles, and delivers ranked job recommendations via email with customized resume downloads. A lightweight web interface lets users browse, filter, and manage their job pipeline.
+Fidalgo JobSearch AI is a .NET 10 job-search and application-preparation suite. It ingests job postings (`Fidalgo.Ingest` via Adzuna API or Playwright scraping), evaluates them against a candidate's resume, career story, and career goals using an OpenAI-compatible local LLM (`Fidalgo.Agent`), generates job-targeted resume and cover letter PDFs (`ApplicationPacketService` + `spawnia/md-to-pdf`), and exposes a React/Vite + ASP.NET Core Minimal API web interface (`Fidalgo.Host` + `Fidalgo.Frontend`) for triaging jobs and previewing/downloading application packets.
 
 ## 2. Technology Choices
 
 | Concern | Choice | Rationale |
 |---|---|---|
-| Runtime | .NET 10 LTS (latest) | REQ-003, long-lived AOT-friendly runtime |
-| Agent Framework | Microsoft Agent Framework (AGENTS) | REQ-002 |
-| Database | SQLite (EF Core) | REQ-007, zero-dependency, single-file |
-| LLM | Local OpenAI-compatible at `http://192.168.1.21:8080/v1` | REQ-100 |
-| Web scraping | Playwright (headless Chromium) | Handles JS-rendered job boards; resilient to anti-bot measures |
-| PDF generation | QuestPDF | Modern, fluent API, no external dependencies |
-| Web UI | Minimal API + Razor Pages (built into .NET) | Single binary, no separate server needed |
-| Scheduling | `System.Threading.Timer` + Cron-style background service | Hosted service pattern |
-| Email | `MailKit` (SMTP) | RFC-compliant, TLS support |
-| Container | Docker (multi-stage, ASP.NET runtime image) | REQ-001 |
+| Runtime | .NET 10 LTS | Long-term support runtime; nullable enabled, warnings as errors |
+| Frontend | React 19 + TypeScript + Vite (`Fidalgo.Frontend`) | Served statically from `Fidalgo.Host/wwwroot` with SPA fallback |
+| Web Host | ASP.NET Core Minimal API (`Fidalgo.Host`) | Lightweight REST endpoints, RFC 7807 `ProblemDetails` via `GlobalExceptionHandler` |
+| Database | SQLite (EF Core 10) | Zero-dependency, single-file store at `%APPDATA%\fidalgo\jobs.db` |
+| LLM | Local OpenAI-compatible at `http://192.168.1.21:8080/v1` | `OpenAI` SDK wrapped by `ITextGenerator` (`OpenAiTextGenerator`) with `Polly` retries and timeouts |
+| Web scraping | `Microsoft.Playwright` (headless Firefox) | Handles JS-rendered job boards in `BrowserFetchTool` |
+| PDF generation | `spawnia/md-to-pdf` HTTP API (`weasyprint`) | OSI-licensed (`MIT` + `BSD-3-Clause`), vector/ATS-friendly PDFs via `IPdfRenderer` (`MdToPdfRenderer` + `PdfCssProvider`) |
+| Logging & Tracing | Serilog (console + daily `CompactJsonFormatter` file sink) + OpenTelemetry / `ActivitySource` | 7-day log retention at `%APPDATA%\fidalgo\logs\log-.json`; W3C Trace Context propagation via `TracingHttpMessageHandler` |
 
 ## 3. Architectural Layers
 
 ```
-┌─────────────────────────────────────────────────┐
-│                  Presentation                    │
-│  ┌──────────────┐    ┌───────────────────────┐  │
-│  │   Web UI     │    │   Email Dispatcher    │  │
-│  │  (Razor)     │    │   (SMTP / QuestPDF)   │  │
-│  └──────────────┘    └───────────────────────┘  │
-├─────────────────────────────────────────────────┤
-│                    Application                   │
-│  ┌──────────────┐ ┌──────────────┐ ┌─────────┐ │
-│  │ Job Scrape   │ │ Skill Extract│ │ Match   │ │
-│  │ Orchestrator │ │ (LLM agent)  │ │ Engine  │ │
-│  └──────────────┘ └──────────────┘ └─────────┘ │
-│  ┌──────────────┐ ┌──────────────┐             │
-│  │ Resume       │ │ Email        │             │
-│  │ Customizer   │ │ Service      │             │
-│  └──────────────┘ └──────────────┘             │
-├─────────────────────────────────────────────────┤
-│                     Domain                       │
-│  User │ Job │ JobSkill │ UserPreference │ Log  │
-├─────────────────────────────────────────────────┤
-│                    Infrastructure                │
-│  ┌──────────┐  ┌───────────┐  ┌────────────┐  │
-│  │  SQLite  │  │  Playwright│  │  MailKit   │  │
-│  │  (EF)    │  │  Browser  │  │  SMTP      │  │
-│  └──────────┘  └───────────┘  └────────────┘  │
-│  ┌──────────────────────────────────────────┐  │
-│  │    OpenAI Client (HTTP → local LLM)     │  │
-│  └──────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│                              Presentation                              │
+│  ┌──────────────────────────────┐  ┌────────────────────────────────┐  │
+│  │ Fidalgo.Host + Frontend      │  │ Fidalgo.Agent & Fidalgo.Ingest │  │
+│  │ (Minimal API + React/Vite)   │  │ (Zero-flag CLI / Batch Runners)│  │
+│  └──────────────┬───────────────┘  └───────────────┬────────────────┘  │
+├─────────────────┼──────────────────────────────────┼───────────────────┤
+│                 └──────────────────┬───────────────┘                   │
+│                          Application (`Fidalgo.Shared`)                │
+│  ┌──────────────────────┐  ┌──────────────────┐  ┌──────────────────┐  │
+│  │ JobEvaluationAgent   │  │ JobSearchAgent / │  │ Application      │  │
+│  │ & Skill/Fit Triage   │  │ ApiModeRunner    │  │ PacketService    │  │
+│  └──────────────────────┘  └──────────────────┘  └──────────────────┘  │
+│  ┌──────────────────────┐  ┌──────────────────┐                        │
+│  │ IUserProfileLoader   │  │ ITextGenerator   │                        │
+│  └──────────────────────┘  └──────────────────┘                        │
+├────────────────────────────────────────────────────────────────────────┤
+│                           Domain & Storage                             │
+│  JobEntity │ JobRepository │ ApplicationPacketFiles/Status/Result      │
+├────────────────────────────────────────────────────────────────────────┤
+│                            Infrastructure                              │
+│  ┌────────────┐  ┌──────────────┐  ┌─────────────┐  ┌───────────────┐ │
+│  │ SQLite     │  │ Playwright   │  │ OpenAI HTTP │  │ md-to-pdf     │ │
+│  │ (EF Core)  │  │ (Scraping)   │  │ (Local LLM) │  │ (WeasyPrint)  │ │
+│  └────────────┘  └──────────────┘  └─────────────┘  └───────────────┘ │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │ Filesystem: %APPDATA%\.config\Fidalgo\config.json,               │  │
+│  │             Documents\Fidalgo\, Documents\Fidalgo\applications\  │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## 4. Module Responsibilities
 
-### 4.1 Scrape Agent (`JobScrapeAgent`)
-- Runs every 4 hours (REQ-004).
-- Launches a headless Playwright session per job-board source.
-- Searches for `'software engineer'` and `'software engineering manager'`.
-- Extracts job listing URLs; reads up to 3 detail pages per invocation.
-- Delegates skill extraction and suitability scoring to the LLM agent.
+### 4.1 `Fidalgo.Ingest` (Job Discovery)
+- Runs in API mode (`ApiModeRunner` via Adzuna REST API, default) or Playwright + LLM scrape mode (`JobSearchAgent`).
+- Supports zero-flag unattended execution: `--help`/`-h` is handled pre-host, bare boolean switches (`--Api`, `--Scrape`, `--QueryJobs`) are normalized by `CliArgumentNormalizer`, and `Email`, `JobSearchKeywords` (folded into `Keywords`), and `ZipCode` default from `%APPDATA%\.config\Fidalgo\config.json`.
+- Missing required settings catch `OptionsValidationException` and exit `1` with actionable setup guidance.
 
-### 4.2 Skill Extraction Agent (`SkillExtractAgent`)
-- Receives a job description (plain text).
-- Uses the local OpenAI-compatible LLM to produce:
-  - Top 10 technical skills (REQ-008)
-  - Top 10 interpersonal skills (REQ-009)
-- Returns structured JSON consumed by the match engine.
+### 4.2 `Fidalgo.Agent` (Evaluation & Batch Packet Generation)
+- `AgentRunner` dispatches async CLI modes (`--QueryJobs`, `--DiscardJobId`, `--ListDiscarded`, `--TargetJobId`, `--GeneratePackets`, and default untriaged evaluation).
+- `JobEvaluationAgent` evaluates untriaged jobs against `resume.md`, optional `career-story.md`, and optional `career-goals.md`, persisting `Pros`, `Cons`, `ResumeHints`, `Score`, and `Recommendation`.
+- Batch/single-job packet generation (`--GeneratePackets`, `--TargetJobId <guid>`, `--ForceRegenerate`, `--SkipExisting`, `--OutputDir`, `--RecommendationFilter`) calls `IApplicationPacketService` for matching non-deleted jobs (default `"Apply"`). When `ApplicationPacket:AutoGenerateForApply` is `true`, default evaluation mode chains automatically into packet generation.
 
-### 4.3 Match Engine (`MatchEngine`)
-- Loads the user's resume plus an optional career story and career goals.
-- Loads extracted employer skills for a given job.
-- Computes overlap percentage → suitability rating (REQ-010, REQ-011).
-- Persists the full job record via EF Core (REQ-011).
+### 4.3 `Fidalgo.Shared` User Profile & Application Packet Pipeline
+- **Storage separation (`UserProfilePaths`, `UserProfileConfig`, `UserProfileResolver`, `IUserProfileLoader`):**
+  - Configuration: `%APPDATA%\.config\Fidalgo\config.json` (`Email`, `ZipCode`, `JobSearchKeywords`, `ApplicationPacket`).
+  - Application state & logs: `%APPDATA%\fidalgo\jobs.db` and `%APPDATA%\fidalgo\logs\log-.json` (daily rolling `CompactJsonFormatter`, 7-day retention).
+  - User profile documents: `Documents\Fidalgo\resume.md`, `career-story.md`, `career-goals.md` via `GetDefaultDocumentsDir()`, with backward-compatible fallback to `%APPDATA%\.config\Fidalgo\` (logged at `Information`) when `ProfileDirectory` override is not set.
+- **LLM Abstraction (`ITextGenerator` / `OpenAiTextGenerator`):**
+  - Single-turn completion abstraction over `OpenAI.Chat.ChatClient` with linked `CancellationTokenSource` timeout (`LlmTimeoutSeconds`), `Polly` exponential-backoff retries, empty-content/refusal `AgentExecutionException` checks, and `Activity` child spans.
+- **PDF Rendering (`IPdfRenderer` / `MdToPdfRenderer` + `PdfCssProvider`):**
+  - Sends `POST` form-urlencoded (`markdown`, static server-owned `css` for `Resume` or `CoverLetter`, `engine=weasyprint`) to `ApplicationPacket:MdToPdfEndpoint` (default `http://localhost:8000`) via `HttpClient` + `TracingHttpMessageHandler`, with `Polly` retries, `PdfTimeoutSeconds`, and `%PDF` magic-header validation.
+- **Packet Orchestration & Store (`ApplicationPacketService`, `FileSystemApplicationPacketStore`, `ApplicationPacketPaths`):**
+  - Deterministic, path-traversal-safe folder `<sanitized-employer>_<sanitized-title>_<short-id>` under `Documents\Fidalgo\applications\` (or `--OutputDir` / `ApplicationPacket:OutputDirectory`).
+  - Two grounded LLM calls (`ResumeTailoringPromptBuilder`, `CoverLetterPromptBuilder`) forbid fabricating unverified experience.
+  - Atomically writes `resume.pdf`, `cover-letter.pdf`, `job-posting.md` (via `JobPostingSnapshotBuilder`), `resume.md`, `cover-letter.md`, and `packet.json` using `.tmp-<guid>` staging files.
+  - Idempotent: skips generation when `resume.pdf`, `cover-letter.pdf`, and `job-posting.md` already exist and are non-empty unless `effectiveForce = ForceRegenerate || !SkipExisting`.
 
-In practice the match step is performed by the `JobEvaluationAgent`
-(`Fidalgo.Agent/Agents/JobEvaluationAgent.cs`), which receives the resume
-plus optional career story and career goals content and folds all three
-into the LLM system prompt. File resolution (CLI path or fallback to
-`%APPDATA%\.config\Fidalgo\resume.md` / `career-story.md` /
-`career-goals.md`) lives in
-`Fidalgo.Shared/UserProfile/UserProfileResolver.cs`. The resume is
-required for the search path; QueryJobs, DiscardJobId, and ListDiscarded
-modes skip the resume check.
-
-### 4.4 Email Service (`EmailService`)
-- Triggered daily at 05:00 by a hosted cron timer (REQ-012).
-- Also triggered on-demand via a web API endpoint.
-- For each user: queries non-discarded jobs, orders by suitability descending.
-- Generates a personalized PDF resume per job (REQ-013).
-- Sends an HTML email with ranked job list and clickable resume download links.
-
-### 4.5 Resume Customizer (`ResumeCustomizer`)
-- Reads the user's base resume (PDF/DOCX).
-- Injects job-specific keywords and highlights derived from the skill overlap analysis.
-- Outputs a tailored PDF via QuestPDF.
-
-### 4.6 Web UI (`FidalgoWeb`)
-- Razor Pages application hosted in the same process (REQ-001).
-- Exposes endpoints for browsing, filtering, and marking jobs (WEB-001–WEB-006).
-- Filters by date range and suitability rating (WEB-002, WEB-003).
-- Allows marking applied (with date) and discarded (WEB-004, WEB-005).
-- Hides discarded jobs from all views by default (WEB-006).
+### 4.4 `Fidalgo.Host` & `Fidalgo.Frontend` (Web UI & REST API)
+- `Fidalgo.Host` loads `config.json` via `AddUserProfileConfig()` (disableable via `UseUserProfileConfig=false` or `FIDALGO_DISABLE_USER_PROFILE_CONFIG=true` for tests) and configures `GlobalExceptionHandler` (`IExceptionHandler` + `ProblemDetails`) preserving `BadHttpRequestException` `400`s while mapping `ValidationException` (`400`), `NotFoundException` (`404`), `UnauthorizedException` (`401`), and `AgentExecutionException` (`502`).
+- Endpoints:
+  - `GET /api/jobs`, `GET /api/jobs/{id}`, `DELETE /api/jobs/{id}`, `GET /api/tenants`
+  - `GET /api/profile/defaults` — exposes server-loaded `resume.md`, `career-story.md`, `career-goals.md` availability/content and `OutputDirectory`
+  - `GET /api/jobs/{id}/packet` — returns packet status, saved directory path, and file URLs
+  - `POST /api/jobs/{id}/packet` — generates/returns application packet using server defaults + optional overrides (`force` flag supported)
+  - `GET /api/jobs/{id}/packet/files/{fileName}` — streams `resume.pdf`, `cover-letter.pdf`, `job-posting.md`, `resume.md`, or `cover-letter.md` (strict 5-file allowlist, inline preview or `?download=true`)
+  - `POST /api/jobs/{id}/resume` — legacy endpoint refactored onto `ITextGenerator` + `IUserProfileLoader`
+- `Fidalgo.Frontend` (`App.tsx`, `ApplicationPacketModal.tsx`, `src/api/packets.ts`) displays server profile readiness badges, optional overrides, `Force regenerate` toggle, `ProblemDetails` error banners, and tabbed inline previews + downloads for `resume.pdf`, `cover-letter.pdf`, and `job-posting.md`.
 
 ## 5. Data Flow
 
 ```
-[Job Boards] ──scrape──▶ [Playwright] ──URLs──▶ [SkillExtractAgent]
-                                                        │
-                                                  [LLM Local]
-                                                        │
-                                           tech + interpersonal skills
-                                                        │
-                                              [MatchEngine]
-                                                        │
-                                          (resume + narrative)
-                                                        │
-                                              suitability %
-                                                        │
-                                              [SQLite / EF Core]
-                                                        │
-                              ┌─────────────────────────┼──────────────────┐
-                              ▼                         ▼                  ▼
-                        [Web UI browse]     [EmailService 05:00]   [ResumeCustomizer]
-                              │                         │                  │
-                              ▼                         ▼                  ▼
-                        [Filtered jobs]     [Rank + PDF + send]   [Tailored PDF]
+[Adzuna / Job Boards] ──▶ [Fidalgo.Ingest] ──▶ [SQLite: jobs.db]
+                                                       │
+[Documents\Fidalgo\ (resume, story, goals)] ───────────┤
+                                                       ▼
+                                           [Fidalgo.Agent: Evaluate]
+                                                       │
+                          ┌────────────────────────────┴───────────────────────────┐
+                          ▼                                                        ▼
+          [Fidalgo.Agent --GeneratePackets]                        [Fidalgo.Host + Frontend]
+                          │                                                        │
+                          └────────────────────▶ [ApplicationPacketService] ◀──────┘
+                                                       │
+                                  ┌────────────────────┼────────────────────┐
+                                  ▼                    ▼                    ▼
+                          [OpenAiTextGenerator] [MdToPdfRenderer]  [FileSystemStore]
+                           (Local LLM HTTP)    (md-to-pdf HTTP)    (Documents\Fidalgo\
+                                                                    applications\<job>\)
 ```
 
 ## 6. Key Design Decisions
 
-### 6.1 SQLite over a managed RDBMS
-- **Trade-off**: No concurrent writers; single-file simplicity.
-- **Justification**: Single-instance deployment; no external database server needed.
-- **Reversibility**: Medium — EF Core abstraction makes migration to PostgreSQL feasible.
+### 6.1 `spawnia/md-to-pdf` Container HTTP API over QuestPDF and Local Chromium
+- **Decision:** Implement `IPdfRenderer` via `MdToPdfRenderer` calling `spawnia/md-to-pdf` (`engine=weasyprint`) over `HttpClient`.
+- **Rationale:** QuestPDF's Community License restricts commercial use above $1M revenue (non-OSI, disallowed by `AGENTS.md`). Client-side `html2pdf.js` produces rasterized non-ATS images and cannot run in CLI batch mode. `spawnia/md-to-pdf` (MIT) + `WeasyPrint` (BSD-3-Clause) are OSI-licensed, produce genuine vector/CSS-paged PDFs, require zero new NuGet packages or local browser installs in .NET hosts, and stay swappable behind `IPdfRenderer`.
+- **Reversibility:** High — `IPdfRenderer` isolates all callers from the concrete PDF engine.
 
-### 6.2 Playwright over HTTP-only scrapers
-- **Trade-off**: Heavier resource usage (Chromium binary ~300 MB).
-- **Justification**: Job boards render content client-side and employ anti-bot measures.
-- **Reversibility**: Low — Playwright handles JS rendering; switching to HTTP clients would break on dynamic pages.
+### 6.2 Separation of Config, App State, and User Documents
+- **Decision:** Keep `config.json` in `%APPDATA%\.config\Fidalgo\`, `jobs.db` and `logs\` in `%APPDATA%\fidalgo\`, and user-facing documents (`resume.md`, `career-story.md`, `career-goals.md`, `applications\`) in `Documents\Fidalgo\`, with secondary fallback from `Documents\Fidalgo\` to `.config\Fidalgo\` when `ProfileDirectory` is not explicitly overridden.
+- **Rationale:** Resumes and generated PDFs are user documents meant to be easily opened/reviewed in Explorer/Finder, whereas `config.json` is tool configuration and SQLite/JSON logs are application state.
 
-### 6.3 Local LLM over cloud API
-- **Trade-off**: Requires a local GPU/CPU server at `192.168.1.21:8080`.
-- **Justification**: No API costs, full data locality, no PII leaves the network.
-- **Reversibility**: Medium — the OpenAI client abstraction allows fallback to a cloud provider.
+### 6.3 Deterministic Filesystem Packet Addressing
+- **Decision:** Name per-job packet folders `<sanitized-employer>_<sanitized-title>_<short-id>` keyed by the first 8 hex chars of `JobEntity.InternalId`.
+- **Rationale:** Avoids title/employer collisions, enables atomic `.tmp-<guid>` staging and zero-DB-migration idempotency, and guards against Windows invalid characters, reserved device names (`CON`, `NUL`, etc.), and path traversal.
 
-### 6.4 Single-process hosting (Web UI + background agents)
-- **Trade-off**: Web requests compete with scraping for CPU/memory.
-- **Justification**: Simplifies deployment (one container image, REQ-001).
-- **Reversibility**: Medium — can split into separate services later.
+### 6.4 Continuous 4-Hour Pipeline & Docker Compose Hosting
+- **Decision:** Extract reusable `AdzunaJobIngestionService`, `LlmJobEvaluationService`, `CloseFitSelector`, and `JobPipelineRunner` into `Fidalgo.Shared.Pipeline`, hosted inside `Fidalgo.Host` via `JobPipelineBackgroundService` (`PeriodicTimer` defaulting to `4` hours) alongside `GET /api/pipeline/status`, and enabled by default in `docker-compose.yml` (`Pipeline__Enabled=true`, `Pipeline__MinScore=70`).
+- **Rationale:** Running ingestion → evaluation → close-fit packet generation sequentially in a single `BackgroundService` eliminates timing gaps between separate timers while keeping `Fidalgo.Ingest` and `Fidalgo.Agent` CLIs available for manual batch runs. Container mounts (`/data/config`, `/data/profile`, `/data/applications`, `/data/db`, `/data/logs`) and `.env` secrets keep all runtime artifacts off container layers.
 
-## 7. Scheduling Summary
+## 7. Security Considerations
 
-| Schedule | Action |
-|---|---|
-| Every 4 hours | Scrape job boards (REQ-004) |
-| Every day at 05:00 | Send email reports (REQ-012) |
-| On-demand (API call) | Send email report (REQ-012) |
-
-## 8. Security Considerations
-
-- User resume files and career narratives are stored on the container filesystem, not in the database.
-- The optional career story and career goals live at `%APPDATA%\.config\Fidalgo\career-story.md` and `career-goals.md` by default; users may override either with the `--CareerStory` / `--CareerGoals` CLI flags on `Fidalgo.Agent`. Both are treated as user-controlled input to the LLM.
-- The resume defaults to `%APPDATA%\.config\Fidalgo\resume.md` when `--Resume` is omitted; the user may still pass any path with `--Resume`. Same warning-on-missing semantics as the other profile files.
-- A persistent user config file lives at `%APPDATA%\.config\Fidalgo\config.json`. It holds the user's email and a list of job search keywords (`JobSearchKeywords`). Both `Fidalgo.Ingest` and `Fidalgo.Agent` load it as an optional, layered `IConfiguration` source, so values from the file are the defaults but command-line flags still override. The Ingest path folds `JobSearchKeywords` into the `Keywords` string during a post-bind `Configure` step so the existing `[Required]` validation still passes.
-- SMTP credentials are injected via environment variables or Docker secrets (no hardcoded passwords).
-- The web UI has no authentication layer by requirement; in production, consider adding a simple API key or cookie-based auth.
-- The local LLM endpoint is on a private network (`192.168.1.21`), not exposed externally.
-
-## 9. Reversibility Assessment
-
-| Decision | Reversibility | Notes |
-|---|---|---|
-| SQLite | Medium | EF Core data access layer isolates changes |
-| Playwright | Low | Core scraping logic depends on browser automation |
-| Local LLM endpoint | Medium | OpenAI-compatible client abstraction |
-| Single-process hosting | Medium | Can split Web UI and background service |
-| .NET 10 LTS | Low | Tied to the container runtime image |
+- **Path Traversal & File Allowlist:** `ApplicationPacketPaths.ResolveJobDirectory` enforces `Path.TrimEndingDirectorySeparator` root containment; `GET /api/jobs/{id}/packet/files/{fileName}` enforces a strict 5-file allowlist.
+- **Renderer Isolation:** `MdToPdfRenderer` sends only static server-owned CSS (`PdfCssProvider`) to a server-configured `MdToPdfEndpoint`—never user-supplied CSS or endpoint URLs.
+- **Prompt & PII Hygiene:** Prompts delimit `<job_posting>` as untrusted data and forbid experience fabrication. Logs never emit full resume/story/cover-letter content or `LLM:ApiKey` values.
+- **Error Sanitization:** `GlobalExceptionHandler` returns RFC 7807 `ProblemDetails` with opaque trace IDs and never leaks stack traces to HTTP clients.
+- **Web Auth Posture:** `Fidalgo.Host` remains unauthenticated for single-user local usage; in shared/networked deployments, add reverse-proxy or cookie/API-key authentication.

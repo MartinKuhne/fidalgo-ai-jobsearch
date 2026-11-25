@@ -10,70 +10,58 @@ skinparam rectangle {
 
 title C4 Deployment Diagram - Fidalgo JobSearch AI
 
-Deployment_Node(container, "Docker Container\n(Host: user's machine)") {
+Deployment_Node(host_machine, "Host Workstation / Docker Compose Stack (.env + Volume Mounts)") {
 
-    Deployment_Node(process, "Single .NET 10 Process") {
-
-        node web_node {
-            component [Razor Pages Web Server\n(port 5000)] as web_server
-        }
-
-        node bg_node {
-            component [Hosted Background Service] as hosted_service
-        }
-
-        component [Playwright Chromium\n(headless)] as playwright
-        component [EF Core SQLite] as ef_core
-        component [OpenAI HTTP Client] as openai_client
-        component [MailKit SMTP Client] as mailkit
-        component [QuestPDF] as questpdf
+    Deployment_Node(host_proc, "fidalgo-host Container / .NET 10 Web Process") {
+        component [ASP.NET Core Minimal API\n+ React SPA (wwwroot)] as web_server
+        component [JobPipelineBackgroundService\n(4-hour PeriodicTimer)] as pipeline_bg
+        component [ApplicationPacketService\n+ GlobalExceptionHandler] as host_packet_svc
     }
 
-    node storage {
-        file "sqlite.db" as sqlite_file
-        folder "data/" as user_data
+    Deployment_Node(cli_procs, "fidalgo-ingest & fidalgo-agent Containers / CLIs") {
+        component [ApiModeRunner / JobSearchAgent\n(Playwright Firefox)] as ingest_proc
+        component [JobEvaluationAgent &\nAgentRunner] as agent_proc
     }
+
+    node local_storage {
+        database "jobs.db & logs\\\n(/data/db, /data/logs or %APPDATA%\\fidalgo\\)" as appdata_state
+        file "config.json\n(/data/config or %APPDATA%\\.config\\Fidalgo\\)" as config_file
+        folder "Profile & Applications\n(/data/profile, /data/applications or Documents\\Fidalgo\\)" as user_docs
+    }
+}
+
+Deployment_Node(pdf_container, "spawnia/md-to-pdf Container\n(md-to-pdf:8000 / localhost:8000)") {
+    component [WeasyPrint HTTP API\n(POST form-urlencoded)] as md_to_pdf_api
 }
 
 Deployment_Node(local_server, "Local LLM Server\n(192.168.1.21:8080)") {
-    node llm_container {
-        component [OpenAI-Compatible API\n(e.g., Ollama / vLLM)] as llm_api
-    }
+    component [OpenAI-Compatible API\n(e.g., llama.cpp / vLLM)] as llm_api
 }
 
-Deployment_Node(email_relay, "SMTP Server") {
-    component [SMTP Relay] as smtp_relay
+Deployment_Node(ext_sources, "External Job Sources") {
+    component [Adzuna REST API &\nJob Boards] as job_boards
 }
 
-Deployment_Node(ext_boards, "Job Boards") {
-    node gj { [governmentjobs.com] }
-    node gg { [Google Search] }
-    node gd { [glassdoor.com] }
-    node mn { [monster.com] }
-    node id { [indeed.com] }
-    node li { [linkedin.com] }
-}
+' === Connections ===
+Rel(web_server, host_packet_svc, "in-process DI")
+Rel(pipeline_bg, host_packet_svc, "generates close-fit packets\n(Score >= MinScore)")
+Rel(pipeline_bg, job_boards, "4-hour Adzuna scan")
+Rel(pipeline_bg, llm_api, "evaluates untriaged jobs")
+Rel(host_packet_svc, appdata_state, "EF Core SQLite +\nSerilog JSON logs")
+Rel(host_packet_svc, config_file, "reads defaults")
+Rel(host_packet_svc, user_docs, "reads profile .md;\nwrites packets")
 
-' === Internal connections ===
-Rel(web_server, ef_core, "HTTP REST")
-Rel(hosted_service, playwright, "launches browser")
-Rel(hosted_service, openai_client, "POST JSON")
-Rel(hosted_service, mailkit, "send email")
-Rel(hosted_service, questpdf, "generate PDF")
-Rel(ef_core, sqlite_file, "file I/O")
+Rel(ingest_proc, job_boards, "REST API / Playwright\nFirefox scraping")
+Rel(ingest_proc, appdata_state, "writes jobs.db +\nlogs\\")
+Rel(ingest_proc, config_file, "reads defaults")
 
-' === External connections ===
-Rel(playwright, gj, "HTTP GET +\nJS rendering")
-Rel(playwright, gg, "HTTP GET +\nJS rendering")
-Rel(playwright, gd, "HTTP GET +\nJS rendering")
-Rel(playwright, mn, "HTTP GET +\nJS rendering")
-Rel(playwright, id, "HTTP GET +\nJS rendering")
-Rel(playwright, li, "HTTP GET +\nJS rendering")
+Rel(agent_proc, appdata_state, "reads/updates jobs.db\n+ logs\\")
+Rel(agent_proc, config_file, "reads defaults")
+Rel(agent_proc, user_docs, "reads profile .md;\nwrites packets")
 
-Rel(openai_client, llm_api, "HTTP POST\n/v1/chat/completions")
-Rel(mailkit, smtp_relay, "SMTP / TLS")
-
-Rel(user_data, web_server, "resume uploads")
-Rel(user_data, hosted_service, "reads resume + narrative")
+Rel(host_packet_svc, llm_api, "HTTP POST\n/v1/chat/completions")
+Rel(agent_proc, llm_api, "HTTP POST\n/v1/chat/completions")
+Rel(host_packet_svc, md_to_pdf_api, "HTTP POST\n(markdown, css, weasyprint)")
+Rel(agent_proc, md_to_pdf_api, "HTTP POST\n(markdown, css, weasyprint)")
 
 @enduml

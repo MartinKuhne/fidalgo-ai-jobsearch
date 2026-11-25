@@ -1,11 +1,9 @@
 using OpenAI.Chat;
+using Fidalgo.Shared.Pipeline;
 using Fidalgo.Shared.Storage;
-using System.Text.Json;
-using System.Linq;
 using Microsoft.Extensions.Logging;
-using Fidalgo.Shared.ErrorHandling;
+using Microsoft.Extensions.Logging.Abstractions;
 
-using Fidalgo.Shared.Tools;
 namespace Fidalgo.Agent.Agents;
 
 /// <summary>
@@ -19,7 +17,7 @@ public class JobEvaluationAgent
     private readonly string _resume;
     private readonly string? _careerStory;
     private readonly string? _careerGoals;
-    private readonly ILogger<JobEvaluationAgent> _logger;
+    private readonly ILogger<LlmJobEvaluationService> _serviceLogger;
 
     public JobEvaluationAgent(
         ChatClient chatClient,
@@ -36,100 +34,24 @@ public class JobEvaluationAgent
         _resume = resume;
         _careerStory = careerStory;
         _careerGoals = careerGoals;
-        _logger = logger;
+        _serviceLogger = logger is null
+            ? NullLogger<LlmJobEvaluationService>.Instance
+            : new LoggerAdapter(logger);
     }
 
     /// <summary>Evaluates a job and updates the entity.</summary>
-    public async Task<int> EvaluateAsync(
+    public Task<int> EvaluateAsync(
         JobEntity job,
         CancellationToken cancellationToken = default)
     {
-        var prompt = BuildPrompt(job);
-
-        var messages = new List<ChatMessage>
-        {
-            new SystemChatMessage(prompt)
-        };
-
-        var toolUpdateJob = ChatTool.CreateFunctionTool(
-            functionName: "update_job",
-            functionDescription: "Update a job with evaluation results",
-            functionParameters: BinaryData.FromString("""{"type":"object","properties":{"pros":{"type":"string","description":"Pros of this job"},"cons":{"type":"string","description":"Cons of this job"},"resumeHints":{"type":"string","description":"How this job matches the resume"},"score":{"type":"integer","description":"Score from 0-100"},"recommendation":{"type":"string","description":"Recommendation (Apply, Maybe, Do not apply)"}},"required":["pros","cons","resumeHints","score","recommendation"]}"""));
-
-        var options = new ChatCompletionOptions
-        {
-            Tools = { toolUpdateJob },
-            Temperature = 0.2f
-        };
-
-        int messageCount = 0;
-        bool requiresAction;
-
-        do
-        {
-            requiresAction = false;
-            messageCount++;
-            _logger.LogInformation("Calling LLM (Message #{MessageCount}) for job {JobId}", messageCount, job.InternalId);
-
-            ChatCompletion completion;
-            try
-            {
-                completion = await _chatClient.CompleteChatAsync(messages, options, cancellationToken);
-            }
-            catch (System.ClientModel.ClientResultException ex) when (ex.Status == 400)
-            {
-                _logger.LogError(ex, "LLM API returned 400 Bad Request. Job ID: {JobId}", job.InternalId);
-                return messageCount;
-            }
-
-            switch (completion.FinishReason)
-            {
-                case ChatFinishReason.Stop:
-                    _logger.LogInformation("LLM completed successfully for job {JobId}", job.InternalId);
-                    messages.Add(new AssistantChatMessage(completion));
-                    break;
-
-                case ChatFinishReason.ToolCalls:
-                    messages.Add(new AssistantChatMessage(completion));
-
-                    foreach (ChatToolCall toolCall in completion.ToolCalls)
-                    {
-                        if (toolCall.FunctionName == "update_job")
-                        {
-                            using JsonDocument arguments = JsonDocument.Parse(toolCall.FunctionArguments);
-                            
-                            job.Pros = arguments.RootElement.GetProperty("pros").GetString() ?? string.Empty;
-                            job.Cons = arguments.RootElement.GetProperty("cons").GetString() ?? string.Empty;
-                            job.ResumeHints = arguments.RootElement.GetProperty("resumeHints").GetString() ?? string.Empty;
-                            job.Score = arguments.RootElement.GetProperty("score").GetInt32();
-                            job.Recommendation = arguments.RootElement.GetProperty("recommendation").GetString() ?? "Maybe";
-
-                            if (job.Score < 0 || job.Score > 100) job.Score = 0;
-                            if (job.Recommendation != "Apply" && job.Recommendation != "Maybe" && job.Recommendation != "Do not apply")
-                            {
-                                job.Recommendation = "Maybe";
-                            }
-
-                            await _repository.UpdateAsync(job, cancellationToken);
-                            _logger.LogInformation("Updated job {JobId} with score {Score} and recommendation {Rec}", job.InternalId, job.Score, job.Recommendation);
-                            
-                            messages.Add(new ToolChatMessage(toolCall.Id, "Job successfully updated."));
-                            // Only one tool call needed to save
-                            return messageCount;
-                        }
-                    }
-
-                    requiresAction = true;
-                    break;
-
-                case ChatFinishReason.Length:
-                case ChatFinishReason.ContentFilter:
-                case ChatFinishReason.FunctionCall:
-                    throw new AgentExecutionException($"LLM aborted: {completion.FinishReason}");
-            }
-        } while (requiresAction);
-
-        return messageCount;
+        var service = new LlmJobEvaluationService(_chatClient, _repository, _serviceLogger);
+        return service.EvaluateJobAsync(
+            job,
+            _email,
+            _resume,
+            _careerStory,
+            _careerGoals,
+            cancellationToken);
     }
 
     /// <summary>Builds the LLM system prompt for evaluating a job against the user's resume and optional career story and career goals.</summary>
@@ -142,49 +64,14 @@ public class JobEvaluationAgent
         string resume,
         string? careerStory,
         string? careerGoals,
-        JobEntity job)
+        JobEntity job) =>
+        JobEvaluationPromptBuilder.BuildPrompt(email, resume, careerStory, careerGoals, job);
+
+    private sealed class LoggerAdapter(ILogger inner) : ILogger<LlmJobEvaluationService>
     {
-        var truncatedResume = TruncateResume(resume);
-        var careerStorySection = BuildOptionalSection("Career Story", careerStory);
-        var careerGoalsSection = BuildOptionalSection("Career Goals", careerGoals);
-
-        return $@"You are an AI job evaluation assistant. Your task is to evaluate the following job posting against the user's resume.
-User Email: {email}
-Resume:
-{truncatedResume}
-{careerStorySection}{careerGoalsSection}
-Job Title: {job.Title}
-Employer: {job.Employer}
-Job Description:
-{job.Description}
-
-Instructions:
-1. Extract the required skills, preferred skills, pay, and location details from the job description.
-2. Compare those details against the user's resume, career story, and career goals.
-3. Determine a match score (0-100).
-4. Determine the Pros (why it's a good fit) and Cons (potential concerns).
-5. Generate Resume Hints (tailoring recommendations).
-6. Provide a Recommendation. Must be EXACTLY ""Apply"", ""Maybe"", or ""Do not apply"".
-7. Use the update_job tool to save your evaluation. DO NOT output formatted text, only call the tool.";
-    }
-
-    private static string TruncateResume(string resume)
-    {
-        const int maxChars = 60000;
-        if (resume.Length <= maxChars)
-            return resume;
-
-        return resume[..maxChars];
-    }
-
-    /// <summary>Builds a "Label:\\ncontent\\n\\n" section when the content is present, or an empty string when it is null or whitespace.</summary>
-    private static string BuildOptionalSection(string label, string? content)
-    {
-        if (string.IsNullOrWhiteSpace(content))
-        {
-            return string.Empty;
-        }
-
-        return $"{label}:\n{content}\n\n";
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => inner.BeginScope(state);
+        public bool IsEnabled(LogLevel logLevel) => inner.IsEnabled(logLevel);
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+            inner.Log(logLevel, eventId, state, exception, formatter);
     }
 }

@@ -3,41 +3,63 @@ using Microsoft.Extensions.Logging;
 namespace Fidalgo.Shared.UserProfile;
 
 /// <summary>
-/// Resolves the on-disk path for optional user career profile files
-/// (career story, career goals) consumed by the agent evaluation pipeline.
+/// Resolves the on-disk path for user career profile files
+/// (resume, career story, career goals) consumed by the agent and host pipelines.
 ///
-/// A path supplied on the command line wins when the file exists. Otherwise
-/// the resolver falls back to the default location under
-/// <c>%APPDATA%\.config\Fidalgo</c>. When the caller explicitly passes a path
-/// that does not exist, a warning is logged so the user is not silently
-/// switched to the default.
+/// A path supplied explicitly wins when the file exists. Otherwise, when no explicit
+/// <c>baseDir</c> is provided, the resolver checks <c>Documents\Fidalgo\</c> first and
+/// falls back to the legacy <c>%APPDATA%\.config\Fidalgo\</c> directory with an
+/// informational log message. When an explicit <c>baseDir</c> is provided, only that
+/// directory is searched to preserve strict isolation.
 /// </summary>
 public class UserProfileResolver
 {
-    private readonly string _baseDir;
+    private readonly string _primaryDir;
+    private readonly string? _legacyDir;
     private readonly ILogger<UserProfileResolver> _logger;
 
-    /// <summary>Initializes a new instance of the UserProfileResolver.</summary>
+    /// <summary>Initializes a new instance of the <see cref="UserProfileResolver"/>.</summary>
     /// <param name="logger">Logger for diagnostic output.</param>
-    /// <param name="baseDir">Override for the default base directory; useful in tests.</param>
+    /// <param name="baseDir">Override for the default base directory; when specified, only this directory is searched.</param>
     public UserProfileResolver(ILogger<UserProfileResolver> logger, string? baseDir = null)
     {
-        _baseDir = baseDir ?? UserProfilePaths.GetDefaultBaseDir();
+        ArgumentNullException.ThrowIfNull(logger);
         _logger = logger;
+
+        if (!string.IsNullOrWhiteSpace(baseDir))
+        {
+            _primaryDir = baseDir;
+            _legacyDir = null;
+        }
+        else
+        {
+            _primaryDir = UserProfilePaths.GetDefaultDocumentsDir();
+            _legacyDir = UserProfilePaths.GetDefaultBaseDir();
+        }
     }
 
-    /// <summary>Resolves the on-disk path for the user's resume file, or null if neither the CLI path nor the default file exists.</summary>
-    /// <param name="cliPath">Path supplied on the command line, or null when the user did not pass the flag.</param>
+    internal UserProfileResolver(ILogger<UserProfileResolver> logger, string primaryDir, string? legacyDir)
+    {
+        ArgumentNullException.ThrowIfNull(logger);
+        ArgumentException.ThrowIfNullOrWhiteSpace(primaryDir);
+
+        _logger = logger;
+        _primaryDir = primaryDir;
+        _legacyDir = legacyDir;
+    }
+
+    /// <summary>Resolves the on-disk path for the user's resume file, or null if not found.</summary>
+    /// <param name="cliPath">Path supplied via CLI or override, or null when omitted.</param>
     public string? ResolveResumePath(string? cliPath) =>
         ResolvePath(cliPath, UserProfilePaths.ResumeFileName, "resume");
 
-    /// <summary>Resolves the on-disk path for the user's career story file, or null if neither the CLI path nor the default file exists.</summary>
-    /// <param name="cliPath">Path supplied on the command line, or null when the user did not pass the flag.</param>
+    /// <summary>Resolves the on-disk path for the user's career story file, or null if not found.</summary>
+    /// <param name="cliPath">Path supplied via CLI or override, or null when omitted.</param>
     public string? ResolveCareerStoryPath(string? cliPath) =>
         ResolvePath(cliPath, UserProfilePaths.CareerStoryFileName, "career story");
 
-    /// <summary>Resolves the on-disk path for the user's career goals file, or null if neither the CLI path nor the default file exists.</summary>
-    /// <param name="cliPath">Path supplied on the command line, or null when the user did not pass the flag.</param>
+    /// <summary>Resolves the on-disk path for the user's career goals file, or null if not found.</summary>
+    /// <param name="cliPath">Path supplied via CLI or override, or null when omitted.</param>
     public string? ResolveCareerGoalsPath(string? cliPath) =>
         ResolvePath(cliPath, UserProfilePaths.CareerGoalsFileName, "career goals");
 
@@ -56,7 +78,26 @@ public class UserProfileResolver
                 cliPath);
         }
 
-        var defaultPath = Path.Combine(_baseDir, defaultFileName);
-        return File.Exists(defaultPath) ? defaultPath : null;
+        var primaryPath = Path.Combine(_primaryDir, defaultFileName);
+        if (File.Exists(primaryPath))
+        {
+            return primaryPath;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_legacyDir))
+        {
+            var legacyPath = Path.Combine(_legacyDir, defaultFileName);
+            if (File.Exists(legacyPath))
+            {
+                _logger.LogInformation(
+                    "Loaded {FriendlyName} from legacy config directory {LegacyPath}. Consider moving profile documents to {PrimaryDir}.",
+                    friendlyName,
+                    legacyPath,
+                    _primaryDir);
+                return legacyPath;
+            }
+        }
+
+        return null;
     }
 }

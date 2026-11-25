@@ -1,6 +1,7 @@
 using System.Net;
 using Fidalgo.Shared.Tests.Http;
 using Fidalgo.Shared.Tools;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Xunit;
@@ -97,5 +98,27 @@ public class MarkdownFetchToolTests
         var result = await tool.FetchAsync("https://example.com");
 
         Assert.Equal("", result);
+    }
+
+    [Fact]
+    public async Task FetchAsync_UsesConfiguredMarkdownFetchEndpoint_WhenProvided()
+    {
+        var handler = new HttpMessageHandlerStub();
+        handler.QueueJsonResponse("""{"markdown":"ok"}""");
+        var http = new HttpClient(handler);
+        var logger = Substitute.For<ILogger<MarkdownFetchTool>>();
+        var config = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ExternalTools:MarkdownFetchEndpoint"] = "http://url-to-markdown:3333/"
+            })
+            .Build();
+
+        var tool = new MarkdownFetchTool(http, logger, config);
+        await tool.FetchAsync("https://example.com");
+
+        Assert.NotNull(handler.LastRequest);
+        Assert.Equal("url-to-markdown", handler.LastRequest!.RequestUri!.Host);
+        Assert.Equal(3333, handler.LastRequest.RequestUri.Port);
     }
 }

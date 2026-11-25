@@ -1,217 +1,229 @@
-using OpenAI;
-using OpenAI.Chat;
-using System.ClientModel;
-using Microsoft.EntityFrameworkCore;
+using System.Diagnostics;
+using Fidalgo.Agent;
+using Fidalgo.Agent.Configuration;
+using Fidalgo.Agent.DependencyInjection;
+using Fidalgo.Shared.ApplicationPackets;
+using Fidalgo.Shared.Configuration;
+using Fidalgo.Shared.Llm;
+using Fidalgo.Shared.Logging;
+using Fidalgo.Shared.Storage;
+using Fidalgo.Shared.UserProfile;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
-using Serilog;
-using Serilog.Events;
-using Serilog.Extensions.Hosting;
-using Fidalgo.Agent.Configuration;
-using Fidalgo.Agent.DependencyInjection;
-using Fidalgo.Agent.Tools;
-using Fidalgo.Shared.Tools;
-using Fidalgo.Shared.UserProfile;
-using Fidalgo.Agent.Agents;
-using Fidalgo.Shared.Storage;
-using Fidalgo.Shared.Logging;
-using Fidalgo.Shared.Logging.Configuration;
-using Fidalgo.Shared.Tracing;
-using Fidalgo.Shared.Tracing.Configuration;
+using Microsoft.Extensions.Options;
 
-Log.Logger = new LoggerConfiguration()
-    .WriteTo.Console()
-    .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Warning)
-    .CreateLogger();
+return await Program.ExecuteAsync(args);
 
-if (args.Length == 0 || args.Contains("--help") || args.Contains("-h"))
+/// <summary>
+/// Entry point and host builder for <c>Fidalgo.Agent</c>.
+/// </summary>
+public partial class Program
 {
-    Console.WriteLine("Fidalgo JobSearch AI Agent");
-    Console.WriteLine("Usage: Fidalgo.Agent [options]");
-    Console.WriteLine();
-    Console.WriteLine("Options:");
-    Console.WriteLine("  --Email <email>              [Required] The user's email address");
-    Console.WriteLine("  --Resume <path>              Optional path to the user's resume (falls back to");
-    Console.WriteLine("                               %APPDATA%\\.config\\Fidalgo\\resume.md)");
-    Console.WriteLine("  --CareerStory <path>         Optional path to the user's career story (falls back to");
-    Console.WriteLine("                               %APPDATA%\\.config\\Fidalgo\\career-story.md)");
-    Console.WriteLine("  --CareerGoals <path>         Optional path to the user's career goals (falls back to");
-    Console.WriteLine("                               %APPDATA%\\.config\\Fidalgo\\career-goals.md)");
-    Console.WriteLine("  --QueryJobs true             Query mode: List saved jobs");
-    Console.WriteLine("  --EmployerFilter <name>      Query mode: Filter jobs by employer");
-    Console.WriteLine("  --DateFrom <date>            Query mode: Filter jobs from this date");
-    Console.WriteLine("  --DateTo <date>              Query mode: Filter jobs to this date");
-    Console.WriteLine("  --SourceWebsiteFilter <site> Query mode: Filter by job board source");
-    Console.WriteLine("  --DiscardJobId <guid>        Discard mode: Mark a job as discarded");
-    Console.WriteLine("  --ListDiscarded true         List mode: Show all discarded jobs");
-    Console.WriteLine("  --help, -h                   Show this help message");
-    return 0;
-}
+    private static readonly ActivitySource ActivitySource = new("Fidalgo.Agent");
 
-var builder = Host.CreateApplicationBuilder(args);
-
-string baseDir = AppContext.BaseDirectory;
-builder.Configuration.AddJsonFile(Path.Combine(baseDir, "appsettings.json"), optional: false, reloadOnChange: true);
-builder.Configuration.AddJsonFile(Path.Combine(baseDir, "appsettings.Development.json"), optional: true, reloadOnChange: true);
-builder.Configuration.AddUserProfileConfig();
-builder.Configuration.AddCommandLine(args);
-
-if (builder.Environment.IsDevelopment())
-{
-    builder.Configuration.AddUserSecrets<Program>();
-}
-
-builder.Services.AddSerilog(Log.Logger);
-builder.Services.AddCliOptions(builder.Configuration);
-builder.Services.AddAgentServices(builder.Configuration.GetSection("DatabasePath")?.Get<string>());
-builder.Services.AddLlmConfiguration(builder.Configuration);
-
-builder.Services.AddSingleton<ILoggingConfiguration, LoggingConfiguration>();
-builder.Services.AddSingleton<ITracingConfiguration, TracingConfiguration>();
-builder.Services.AddSingleton<ITraceContextProvider, TraceContextProvider>();
-builder.Services.AddSingleton<ILogEntryWriter, LogEntryWriter>();
-builder.Services.AddSingleton<ISpanFactory, SpanFactory>();
-builder.Services.AddSingleton<ITraceContextPropagator, TraceContextPropagator>();
-builder.Services.AddSingleton<IOtlpExporter, OtlpExporter>();
-
-var host = builder.Build();
-
-using var scope = host.Services.CreateScope();
-var db = scope.ServiceProvider.GetRequiredService<JobDbContext>();
-await db.Database.EnsureCreatedAsync();
-
-var cliOptions = host.Services.GetRequiredService<IOptions<CliOptions>>().Value;
-
-var profileLogger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger<UserProfileResolver>();
-var profileResolver = new UserProfileResolver(profileLogger);
-var resumePath = profileResolver.ResolveResumePath(cliOptions.Resume);
-var careerStoryPath = profileResolver.ResolveCareerStoryPath(cliOptions.CareerStory);
-var careerGoalsPath = profileResolver.ResolveCareerGoalsPath(cliOptions.CareerGoals);
-
-bool resumeNotNeeded = cliOptions.QueryJobs || cliOptions.DiscardJobId is not null || cliOptions.ListDiscarded;
-if (resumePath is null && !resumeNotNeeded)
-{
-    Console.WriteLine("Error: --resume is required (or a resume.md in %APPDATA%\\.config\\Fidalgo)");
-    return 1;
-}
-
-if (cliOptions.QueryJobs)
-{
-    return RunQueryJobsMode(host, cliOptions);
-}
-
-if (cliOptions.DiscardJobId is not null)
-{
-    return RunDiscardJobMode(host, cliOptions.DiscardJobId.Value);
-}
-
-if (cliOptions.ListDiscarded)
-{
-    return RunListDiscardedMode(host, cliOptions.Email);
-}
-
-var resumeContent = File.ReadAllText(resumePath!);
-var careerStoryContent = careerStoryPath is null ? null : File.ReadAllText(careerStoryPath);
-var careerGoalsContent = careerGoalsPath is null ? null : File.ReadAllText(careerGoalsPath);
-
-return RunSearchMode(host, cliOptions, resumeContent, careerStoryContent, careerGoalsContent);
-
-static int RunQueryJobsMode(IHost host, CliOptions options)
-{
-    using var scope = host.Services.CreateScope();
-    var repository = ServiceProviderServiceExtensions.GetRequiredService<JobRepository>(scope.ServiceProvider);
-    var tool = ServiceProviderServiceExtensions.GetRequiredService<GetJobsTool>(scope.ServiceProvider);
-    
-    var jobs = tool.GetAsync(options.Email, options.DateFrom, options.DateTo, options.EmployerFilter, null, options.SourceWebsiteFilter).Result;
-    
-    Console.WriteLine($"Found {jobs.Count} jobs:");
-    foreach (var job in jobs)
+    internal static readonly HashSet<string> BooleanFlags = new(StringComparer.OrdinalIgnoreCase)
     {
-        Console.WriteLine($"- [{job.Employer}] {job.EmployerJobId} (Score: {job.Score}, {job.Recommendation})");
-    }
-    
-    return 0;
-}
+        "--QueryJobs",
+        "--ListDiscarded",
+        "--GeneratePackets",
+        "--ForceRegenerate",
+        "--SkipExisting"
+    };
 
-static int RunDiscardJobMode(IHost host, Guid internalId)
-{
-    using var scope = host.Services.CreateScope();
-    var repository = ServiceProviderServiceExtensions.GetRequiredService<JobRepository>(scope.ServiceProvider);
-    var success = repository.SoftDeleteAsync(internalId).Result;
-    
-    if (success)
+    /// <summary>
+    /// Executes the <c>Fidalgo.Agent</c> CLI workflow.
+    /// </summary>
+    public static async Task<int> ExecuteAsync(
+        string[] args,
+        TextWriter? output = null,
+        TextWriter? error = null,
+        bool? useUserProfileConfig = null,
+        string? userProfileConfigPath = null,
+        string? logFilePath = null,
+        Action<IConfigurationBuilder>? configureConfiguration = null,
+        Action<IServiceCollection>? configureServices = null,
+        CancellationToken cancellationToken = default)
     {
-        Console.WriteLine($"Job {internalId} marked as discarded");
-        return 0;
-    }
-    else
-    {
-        Console.WriteLine($"Job {internalId} not found");
-        return 1;
-    }
-}
+        var outWriter = output ?? Console.Out;
+        var errWriter = error ?? Console.Error;
 
-static int RunListDiscardedMode(IHost host, string email)
-{
-    using var scope = host.Services.CreateScope();
-    var repository = ServiceProviderServiceExtensions.GetRequiredService<JobRepository>(scope.ServiceProvider);
-    var jobs = repository.GetDiscardedAsync(email).Result;
-    
-    Console.WriteLine($"Found {jobs.Count} discarded jobs:");
-    foreach (var job in jobs)
-    {
-        Console.WriteLine($"- [{job.Employer}] {job.EmployerJobId} (Score: {job.Score}, {job.Recommendation})");
-    }
-    
-    return 0;
-}
+        if (FidalgoHostBootstrap.HasHelpFlag(args))
+        {
+            PrintUsage(outWriter);
+            return 0;
+        }
 
-static int RunSearchMode(
-    IHost host,
-    CliOptions options,
-    string resumeContent,
-    string? careerStoryContent,
-    string? careerGoalsContent)
-{
-    using var scope = host.Services.CreateScope();
-    var serviceProvider = scope.ServiceProvider;
+        using var host = BuildHost(
+            args,
+            output: outWriter,
+            useUserProfileConfig: useUserProfileConfig,
+            userProfileConfigPath: userProfileConfigPath,
+            logFilePath: logFilePath,
+            configureConfiguration: configureConfiguration,
+            configureServices: configureServices);
 
-    var chatClient = ServiceProviderServiceExtensions.GetRequiredService<ChatClient>(serviceProvider);
-    var repository = ServiceProviderServiceExtensions.GetRequiredService<JobRepository>(serviceProvider);
-    var loggerFactory = ServiceProviderServiceExtensions.GetRequiredService<ILoggerFactory>(serviceProvider);
-    var logger = loggerFactory.CreateLogger<JobEvaluationAgent>();
-
-    var agent = new JobEvaluationAgent(
-        chatClient,
-        repository,
-        options.Email,
-        resumeContent,
-        logger,
-        careerStoryContent,
-        careerGoalsContent);
-
-    var jobs = repository.GetUntriagedAsync(options.Email).Result;
-    Console.WriteLine($"Found {jobs.Count} untriaged jobs.");
-
-    int totalProcessed = 0;
-    foreach (var job in jobs)
-    {
-        Console.WriteLine($"Evaluating job: {job.Title} at {job.Employer}...");
         try
         {
-            agent.EvaluateAsync(job).Wait();
-            totalProcessed++;
+            await host.StartAsync(cancellationToken);
+
+            using var rootTrace = FidalgoHostBootstrap.BeginRootTrace(
+                ActivitySource,
+                "agent.run",
+                host.Services.GetService<ITraceContextProvider>());
+
+            var logger = host.Services.GetRequiredService<ILogger<Program>>();
+            logger.LogInformation("Fidalgo.Agent starting up.");
+
+            await using (var initScope = host.Services.CreateAsyncScope())
+            {
+                var db = initScope.ServiceProvider.GetRequiredService<JobDbContext>();
+                await db.Database.EnsureCreatedAsync(cancellationToken);
+            }
+
+            var cliOptions = host.Services.GetRequiredService<IOptions<CliOptions>>().Value;
+
+            int exitCode;
+            await using (var runScope = host.Services.CreateAsyncScope())
+            {
+                var runner = runScope.ServiceProvider.GetRequiredService<AgentRunner>();
+                exitCode = await runner.RunAsync(cliOptions, cancellationToken);
+            }
+
+            logger.LogInformation("Fidalgo.Agent shutting down with exit code {ExitCode}.", exitCode);
+            await host.StopAsync(cancellationToken);
+            return exitCode;
+        }
+        catch (OptionsValidationException ex)
+        {
+            await WriteValidationErrorsAsync([ex], errWriter);
+            return 1;
+        }
+        catch (AggregateException ex) when (FidalgoHostBootstrap.TryGetValidationExceptions(ex, out var validationExceptions))
+        {
+            await WriteValidationErrorsAsync(validationExceptions, errWriter);
+            return 1;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return 1;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Failed to evaluate job {job.InternalId}: {ex.Message}");
-            logger.LogError(ex, "Failed to evaluate job {JobId}", job.InternalId);
+            var logger = host.Services.GetService<ILogger<Program>>();
+            logger?.LogError(ex, "Unexpected exception terminated Fidalgo.Agent.");
+            await errWriter.WriteLineAsync($"Fatal error: {ex.Message}");
+            return 1;
         }
     }
-    
-    Console.WriteLine($"Evaluation complete. Processed {totalProcessed} jobs.");
-    return 0;
+
+    /// <summary>
+    /// Builds a configured <see cref="IHost"/> for <c>Fidalgo.Agent</c> with normalized boolean flags,
+    /// shared LLM/packet DI registrations, and per-host Serilog logging.
+    /// </summary>
+    public static IHost BuildHost(
+        string[] args,
+        TextWriter? output = null,
+        bool? useUserProfileConfig = null,
+        string? userProfileConfigPath = null,
+        string? logFilePath = null,
+        Action<IConfigurationBuilder>? configureConfiguration = null,
+        Action<IServiceCollection>? configureServices = null)
+    {
+        var normalizedArgs = CliArgumentNormalizer.NormalizeBooleanFlags(args, BooleanFlags);
+        var builder = Host.CreateApplicationBuilder(normalizedArgs);
+
+        var baseDir = AppContext.BaseDirectory;
+        FidalgoHostBootstrap.InsertSourceBeforeEnvAndCli(builder.Configuration, cfg =>
+            cfg.AddJsonFile(Path.Combine(baseDir, "appsettings.json"), optional: false, reloadOnChange: true));
+        FidalgoHostBootstrap.InsertSourceBeforeEnvAndCli(builder.Configuration, cfg =>
+            cfg.AddJsonFile(Path.Combine(baseDir, "appsettings.Development.json"), optional: true, reloadOnChange: true));
+
+        var loadUserProfile = useUserProfileConfig ?? FidalgoHostBootstrap.ShouldLoadUserProfileConfig(builder.Configuration);
+        if (loadUserProfile)
+        {
+            FidalgoHostBootstrap.InsertUserProfileConfigBeforeEnvAndCli(builder.Configuration);
+        }
+        else if (!string.IsNullOrWhiteSpace(userProfileConfigPath))
+        {
+            FidalgoHostBootstrap.InsertUserProfileConfigBeforeEnvAndCli(builder.Configuration, userProfileConfigPath);
+        }
+
+        if (builder.Environment.IsDevelopment())
+        {
+            FidalgoHostBootstrap.InsertSourceBeforeEnvAndCli(builder.Configuration, cfg =>
+                cfg.AddUserSecrets<Program>(optional: true));
+        }
+
+        configureConfiguration?.Invoke(builder.Configuration);
+        builder.Configuration.AddCommandLine(normalizedArgs);
+
+        builder.Services.AddCliOptions(builder.Configuration);
+        builder.Services.AddAgentServices(FidalgoHostBootstrap.ResolveDatabasePath(builder.Configuration));
+        builder.Services.AddFidalgoLlmClient(builder.Configuration);
+        builder.Services.AddApplicationPacketServices(builder.Configuration);
+
+        if (output is not null)
+        {
+            builder.Services.AddSingleton(output);
+        }
+
+        builder.Services.AddFidalgoTelemetry();
+        FidalgoHostBootstrap.ConfigureFidalgoSerilog(builder.Services, builder.Logging, logFilePath);
+
+        configureServices?.Invoke(builder.Services);
+
+        return builder.Build();
+    }
+
+    internal static void PrintUsage(TextWriter writer)
+    {
+        writer.WriteLine("Fidalgo JobSearch AI Agent");
+        writer.WriteLine("Usage: Fidalgo.Agent [options]");
+        writer.WriteLine();
+        writer.WriteLine("Configuration & Profile Defaults:");
+        writer.WriteLine("  Config file:      %APPDATA%\\.config\\Fidalgo\\config.json (Email, ApplicationPacket, LLM)");
+        writer.WriteLine("  Profile files:    Documents\\Fidalgo\\resume.md, career-story.md, career-goals.md");
+        writer.WriteLine("                    (falls back to %APPDATA%\\.config\\Fidalgo\\ if not yet migrated)");
+        writer.WriteLine("  Packet output:    Documents\\Fidalgo\\applications\\<employer>_<title>_<short-id>\\");
+        writer.WriteLine();
+        writer.WriteLine("Options:");
+        writer.WriteLine("  --Email <email>                 [Required if not in config.json] Tenant email address");
+        writer.WriteLine("  --Resume <path>                 Optional path to base resume (default: Documents\\Fidalgo\\resume.md)");
+        writer.WriteLine("  --CareerStory <path>            Optional path to career story (default: Documents\\Fidalgo\\career-story.md)");
+        writer.WriteLine("  --CareerGoals <path>            Optional path to career goals (default: Documents\\Fidalgo\\career-goals.md)");
+        writer.WriteLine("  --GeneratePackets               Generate application packets for matching evaluated jobs");
+        writer.WriteLine("  --TargetJobId <guid>            Generate application packet for a single job ID");
+        writer.WriteLine("  --ForceRegenerate               Overwrite existing complete packets when generating");
+        writer.WriteLine("  --SkipExisting <bool>           Skip complete existing packets (default: true)");
+        writer.WriteLine("  --OutputDir <path>              Override output base directory for generated packets");
+        writer.WriteLine("  --RecommendationFilter <tiers>  Comma-separated recommendation tiers (default: Apply)");
+        writer.WriteLine("  --MinScore <0-100>              Minimum match score for packet generation (default: 0)");
+        writer.WriteLine("  --QueryJobs                     Query mode: List saved jobs");
+        writer.WriteLine("  --EmployerFilter <name>         Query mode: Filter jobs by employer");
+        writer.WriteLine("  --DateFrom <date>               Query mode: Filter jobs from this date");
+        writer.WriteLine("  --DateTo <date>                 Query mode: Filter jobs to this date");
+        writer.WriteLine("  --SourceWebsiteFilter <site>    Query mode: Filter by job board source");
+        writer.WriteLine("  --DiscardJobId <guid>           Discard mode: Mark a job as discarded");
+        writer.WriteLine("  --ListDiscarded                 List mode: Show all discarded jobs");
+        writer.WriteLine("  --help, -h                      Show this help message");
+    }
+
+    private static async Task WriteValidationErrorsAsync(
+        IEnumerable<OptionsValidationException> exceptions,
+        TextWriter errWriter)
+    {
+        await errWriter.WriteLineAsync("Configuration error: required settings are missing or invalid.");
+        foreach (var failure in exceptions.SelectMany(e => e.Failures))
+        {
+            await errWriter.WriteLineAsync($"  - {failure}");
+        }
+
+        await errWriter.WriteLineAsync();
+        await errWriter.WriteLineAsync(
+            $"Configure defaults in {UserProfileConfig.GetDefaultConfigPath()} (e.g. \"Email\") or pass --Email <email>.");
+        await errWriter.WriteLineAsync();
+        PrintUsage(errWriter);
+    }
 }

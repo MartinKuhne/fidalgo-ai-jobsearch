@@ -218,7 +218,14 @@ FakesAssemblies/
 # Per-environment configuration
 **/appsettings.Development.json
 
-*Resume*
+*Resume*.md
+*Resume*.pdf
+*Resume*.docx
+*Resume*.txt
 
 **/wwwroot/
+
+# Local Docker Compose secrets and mounted runtime data
+.env
+/data/
 
