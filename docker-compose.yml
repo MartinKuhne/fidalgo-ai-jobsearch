@@ -1,3 +1,11 @@
+x-fidalgo-common-env: &fidalgo-common-env
+  FIDALGO_PROFILE_CONFIG_PATH: /data/config/config.json
+  DatabasePath: /data/db/jobs.db
+  FIDALGO_LOG_DIR: /data/logs
+  LLM__Endpoint: "${LLM_ENDPOINT:-http://host.docker.internal:8080/v1}"
+  LLM__Model: "${LLM_MODEL:-google/gemma-4-e4b}"
+  LLM__ApiKey: "${LLM_API_KEY:-api-key-here}"
+
 services:
   md-to-pdf:
     image: spawnia/md-to-pdf:latest
@@ -12,11 +20,95 @@ services:
       retries: 3
       start_period: 10s
 
+  fidalgo-host:
+    build:
+      context: .
+      target: host
+    container_name: fidalgo-host
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "${FIDALGO_HOST_PORT:-5299}:8080"
+    depends_on:
+      md-to-pdf:
+        condition: service_healthy
+    environment:
+      <<: *fidalgo-common-env
+      ASPNETCORE_URLS: http://+:8080
+      ApplicationPacket__ProfileDirectory: /data/profile
+      ApplicationPacket__OutputDirectory: /data/applications
+      ApplicationPacket__MdToPdfEndpoint: http://md-to-pdf:8000
+    volumes:
+      - "${FIDALGO_CONFIG_DIR:-./data/config}:/data/config:ro"
+      - "${FIDALGO_PROFILE_DIR:-./data/profile}:/data/profile:ro"
+      - "${FIDALGO_APPLICATIONS_DIR:-./data/applications}:/data/applications"
+      - "${FIDALGO_DB_DIR:-./data/db}:/data/db"
+      - "${FIDALGO_LOGS_DIR:-./data/logs}:/data/logs"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  fidalgo-ingest:
+    build:
+      context: .
+      target: ingest
+    container_name: fidalgo-ingest
+    profiles:
+      - batch
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      <<: *fidalgo-common-env
+      Adzuna__AppId: "${ADZUNA_APP_ID:-}"
+      Adzuna__AppKey: "${ADZUNA_APP_KEY:-}"
+      ExternalTools__SearxngEndpoint: http://searxng:8080
+      ExternalTools__MarkdownFetchEndpoint: http://url-to-markdown:3333
+    volumes:
+      - "${FIDALGO_CONFIG_DIR:-./data/config}:/data/config:ro"
+      - "${FIDALGO_DB_DIR:-./data/db}:/data/db"
+      - "${FIDALGO_LOGS_DIR:-./data/logs}:/data/logs"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: "no"
+
+  fidalgo-agent:
+    build:
+      context: .
+      target: agent
+    container_name: fidalgo-agent
+    profiles:
+      - batch
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      md-to-pdf:
+        condition: service_healthy
+    environment:
+      <<: *fidalgo-common-env
+      ApplicationPacket__ProfileDirectory: /data/profile
+      ApplicationPacket__OutputDirectory: /data/applications
+      ApplicationPacket__MdToPdfEndpoint: http://md-to-pdf:8000
+    volumes:
+      - "${FIDALGO_CONFIG_DIR:-./data/config}:/data/config:ro"
+      - "${FIDALGO_PROFILE_DIR:-./data/profile}:/data/profile:ro"
+      - "${FIDALGO_APPLICATIONS_DIR:-./data/applications}:/data/applications"
+      - "${FIDALGO_DB_DIR:-./data/db}:/data/db"
+      - "${FIDALGO_LOGS_DIR:-./data/logs}:/data/logs"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: "no"
+
   url-to-markdown:
     image: ghcr.io/nanodeck/url-to-markdown:latest
     container_name: fidalgo-url-to-markdown
     profiles:
       - scrape
+    env_file:
+      - path: .env
+        required: false
     ports:
       - "${URL_TO_MARKDOWN_PORT:-3333}:3333"
     environment:
@@ -30,6 +122,9 @@ services:
     container_name: fidalgo-searxng
     profiles:
       - scrape
+    env_file:
+      - path: .env
+        required: false
     ports:
       - "${SEARXNG_PORT:-8090}:8080"
     environment:

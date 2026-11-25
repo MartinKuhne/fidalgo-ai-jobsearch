@@ -142,4 +142,19 @@ public class FidalgoHostBootstrapTests : IDisposable
 
         Assert.Same(original, provider.GetCurrentContext());
     }
+
+    [Fact]
+    public void GetDefaultLogFilePath_HonorsFidalgoLogDirEnvVar()
+    {
+        var prev = Environment.GetEnvironmentVariable("FIDALGO_LOG_DIR");
+        try
+        {
+            Environment.SetEnvironmentVariable("FIDALGO_LOG_DIR", "/data/logs");
+            Assert.Equal(Path.Combine("/data/logs", "log-.json"), FidalgoHostBootstrap.GetDefaultLogFilePath());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("FIDALGO_LOG_DIR", prev);
+        }
+    }
 }

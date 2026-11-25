@@ -56,12 +56,12 @@ if (!disableUserProfileConfig)
     }
 }
 
-var appDataRoot = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-var logDirectory = string.IsNullOrWhiteSpace(appDataRoot)
-    ? Path.Combine(AppContext.BaseDirectory, "fidalgo", "logs")
-    : Path.Combine(appDataRoot, "fidalgo", "logs");
-Directory.CreateDirectory(logDirectory);
-var logFilePath = Path.Combine(logDirectory, "log-.json");
+var logFilePath = FidalgoHostBootstrap.GetDefaultLogFilePath();
+var logDirectory = Path.GetDirectoryName(logFilePath);
+if (!string.IsNullOrWhiteSpace(logDirectory))
+{
+    Directory.CreateDirectory(logDirectory);
+}
 
 builder.Services.AddSerilog(
     (services, loggerConfiguration) => loggerConfiguration
@@ -388,7 +388,9 @@ app.Lifetime.ApplicationStarted.Register(() =>
 {
     app.Logger.LogInformation("Fidalgo.Host started.");
 
-    if (app.Environment.IsEnvironment("Testing"))
+    if (app.Environment.IsEnvironment("Testing") ||
+        string.Equals(Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER"), "true", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(Environment.GetEnvironmentVariable("FIDALGO_DISABLE_BROWSER_LAUNCH"), "true", StringComparison.OrdinalIgnoreCase))
     {
         return;
     }

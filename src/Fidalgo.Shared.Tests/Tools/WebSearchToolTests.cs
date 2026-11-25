@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using Fidalgo.Shared.Tests.Http;
 using Fidalgo.Shared.Tools;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Xunit;
@@ -108,5 +109,27 @@ public class WebSearchToolTests
         Assert.NotNull(handler.LastRequest);
         Assert.Contains("q=hello%20world%20%26%20friends", handler.LastRequest!.RequestUri!.Query);
         Assert.Contains("format=json", handler.LastRequest.RequestUri.Query);
+    }
+
+    [Fact]
+    public async Task SearchAsync_UsesConfiguredSearxngEndpoint_WhenProvided()
+    {
+        var handler = new HttpMessageHandlerStub();
+        handler.QueueJsonResponse("""{"results": []}""");
+        var http = new HttpClient(handler);
+        var logger = Substitute.For<ILogger<WebSearchTool>>();
+        var config = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ExternalTools:SearxngEndpoint"] = "http://searxng:8080/"
+            })
+            .Build();
+
+        var tool = new WebSearchTool(http, logger, config);
+        await tool.SearchAsync("architect");
+
+        Assert.NotNull(handler.LastRequest);
+        Assert.Equal("searxng", handler.LastRequest!.RequestUri!.Host);
+        Assert.Equal(8080, handler.LastRequest.RequestUri.Port);
     }
 }

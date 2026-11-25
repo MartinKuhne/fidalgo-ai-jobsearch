@@ -138,10 +138,17 @@ public static class FidalgoHostBootstrap
     }
 
     /// <summary>
-    /// Returns the default daily rolling Serilog log file path under <c>%APPDATA%\fidalgo\logs\log-.json</c>.
+    /// Returns the default daily rolling Serilog log file path.
+    /// Honors <c>FIDALGO_LOG_DIR</c> when set, falling back to <c>%APPDATA%\fidalgo\logs\log-.json</c>.
     /// </summary>
     public static string GetDefaultLogFilePath()
     {
+        var overrideDir = Environment.GetEnvironmentVariable("FIDALGO_LOG_DIR");
+        if (!string.IsNullOrWhiteSpace(overrideDir))
+        {
+            return Path.Combine(overrideDir, "log-.json");
+        }
+
         var appDataRoot = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         var logDirectory = string.IsNullOrWhiteSpace(appDataRoot)
             ? Path.Combine(AppContext.BaseDirectory, "fidalgo", "logs")

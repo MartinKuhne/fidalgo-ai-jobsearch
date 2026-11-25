@@ -10,26 +10,26 @@ skinparam rectangle {
 
 title C4 Deployment Diagram - Fidalgo JobSearch AI
 
-Deployment_Node(host_machine, "User Workstation / Host") {
+Deployment_Node(host_machine, "Host Workstation / Docker Compose Stack (.env + Volume Mounts)") {
 
-    Deployment_Node(host_proc, "Fidalgo.Host (.NET 10 Web Process)") {
+    Deployment_Node(host_proc, "fidalgo-host Container / .NET 10 Web Process") {
         component [ASP.NET Core Minimal API\n+ React SPA (wwwroot)] as web_server
         component [ApplicationPacketService\n+ GlobalExceptionHandler] as host_packet_svc
     }
 
-    Deployment_Node(cli_procs, "Fidalgo.Ingest & Fidalgo.Agent (.NET 10 CLIs)") {
+    Deployment_Node(cli_procs, "fidalgo-ingest & fidalgo-agent Containers / CLIs") {
         component [ApiModeRunner / JobSearchAgent\n(Playwright Firefox)] as ingest_proc
         component [JobEvaluationAgent &\nAgentRunner] as agent_proc
     }
 
     node local_storage {
-        database "jobs.db & logs\\\n(%APPDATA%\\fidalgo\\)" as appdata_state
-        file "config.json\n(%APPDATA%\\.config\\Fidalgo\\)" as config_file
-        folder "Documents\\Fidalgo\\\n(resume, story, goals,\napplications\\<job>\\)" as user_docs
+        database "jobs.db & logs\\\n(/data/db, /data/logs or %APPDATA%\\fidalgo\\)" as appdata_state
+        file "config.json\n(/data/config or %APPDATA%\\.config\\Fidalgo\\)" as config_file
+        folder "Profile & Applications\n(/data/profile, /data/applications or Documents\\Fidalgo\\)" as user_docs
     }
 }
 
-Deployment_Node(pdf_container, "spawnia/md-to-pdf Container\n(localhost:8000)") {
+Deployment_Node(pdf_container, "spawnia/md-to-pdf Container\n(md-to-pdf:8000 / localhost:8000)") {
     component [WeasyPrint HTTP API\n(POST form-urlencoded)] as md_to_pdf_api
 }
 

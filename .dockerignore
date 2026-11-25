@@ -1,0 +1,13 @@
+.git
+.env
+**/bin
+**/obj
+**/node_modules
+**/TestResults
+data
+fetch-logs
+*.db
+*Resume*.md
+*Resume*.pdf
+*Resume*.docx
+*Resume*.txt

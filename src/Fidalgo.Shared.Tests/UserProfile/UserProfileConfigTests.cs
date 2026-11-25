@@ -8,9 +8,42 @@ public class UserProfileConfigTests
     [Fact]
     public void GetDefaultConfigPath_EndsWithConfigJson()
     {
-        var path = UserProfileConfig.GetDefaultConfigPath();
+        var prevPath = Environment.GetEnvironmentVariable("FIDALGO_PROFILE_CONFIG_PATH");
+        var prevDir = Environment.GetEnvironmentVariable("FIDALGO_CONFIG_DIR");
+        Environment.SetEnvironmentVariable("FIDALGO_PROFILE_CONFIG_PATH", null);
+        Environment.SetEnvironmentVariable("FIDALGO_CONFIG_DIR", null);
+        try
+        {
+            var path = UserProfileConfig.GetDefaultConfigPath();
 
-        Assert.EndsWith(Path.Combine(".config", "Fidalgo", "config.json"), path);
+            Assert.EndsWith(Path.Combine(".config", "Fidalgo", "config.json"), path);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("FIDALGO_PROFILE_CONFIG_PATH", prevPath);
+            Environment.SetEnvironmentVariable("FIDALGO_CONFIG_DIR", prevDir);
+        }
+    }
+
+    [Fact]
+    public void GetDefaultConfigPath_HonorsEnvVarOverrides()
+    {
+        var prevPath = Environment.GetEnvironmentVariable("FIDALGO_PROFILE_CONFIG_PATH");
+        var prevDir = Environment.GetEnvironmentVariable("FIDALGO_CONFIG_DIR");
+        try
+        {
+            Environment.SetEnvironmentVariable("FIDALGO_PROFILE_CONFIG_PATH", null);
+            Environment.SetEnvironmentVariable("FIDALGO_CONFIG_DIR", "/data/config");
+            Assert.Equal(Path.Combine("/data/config", "config.json"), UserProfileConfig.GetDefaultConfigPath());
+
+            Environment.SetEnvironmentVariable("FIDALGO_PROFILE_CONFIG_PATH", "/custom/my-config.json");
+            Assert.Equal("/custom/my-config.json", UserProfileConfig.GetDefaultConfigPath());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("FIDALGO_PROFILE_CONFIG_PATH", prevPath);
+            Environment.SetEnvironmentVariable("FIDALGO_CONFIG_DIR", prevDir);
+        }
     }
 
     [Fact]

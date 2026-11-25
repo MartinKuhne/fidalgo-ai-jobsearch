@@ -225,3 +225,7 @@ FakesAssemblies/
 
 **/wwwroot/
 
+# Local Docker Compose secrets and mounted runtime data
+.env
+/data/
+

@@ -133,13 +133,27 @@ Options:
    dotnet user-secrets set Adzuna:AppKey <your-app-key>
    ```
 
-2. Start the supporting Docker services via Docker Compose (starts `spawnia/md-to-pdf` on port `8000` by default; pass `--profile scrape` to also start `url-to-markdown` on `3333` and `searxng` on `8090` for `Fidalgo.Ingest --Scrape`):
+2. **Option A — Run the entire system via Docker Compose (Recommended):**
+   Copy [`.env.example`](.env.example) to `.env`, populate your API secrets (`ADZUNA_APP_ID`, `ADZUNA_APP_KEY`, `LLM_ENDPOINT`, `LLM_API_KEY`) and mounted host folder paths (`FIDALGO_CONFIG_DIR`, `FIDALGO_PROFILE_DIR`, `FIDALGO_APPLICATIONS_DIR`, `FIDALGO_DB_DIR`, `FIDALGO_LOGS_DIR`), then start the stack:
    ```bash
-   # PDF rendering service (required for resume.pdf and cover-letter.pdf generation)
-   docker compose up -d
+   cp .env.example .env
 
-   # Optional: also start url-to-markdown + searxng for LLM web-scraping mode
+   # Build and start the web UI + API (http://localhost:5299) and md-to-pdf (port 8000)
+   docker compose up -d --build
+
+   # Run batch ingestion and evaluation/packet generation against the mounted folders
+   docker compose run --rm fidalgo-ingest
+   docker compose run --rm fidalgo-agent
+   docker compose run --rm fidalgo-agent --GeneratePackets
+
+   # Optional: also start url-to-markdown (3333) and searxng (8090) for --Scrape mode
    docker compose --profile scrape up -d
+   ```
+
+   **Option B — Run locally with `dotnet run` (starts only supporting containers via Compose):**
+   ```bash
+   docker compose up -d md-to-pdf
+   # Optional for --Scrape: docker compose --profile scrape up -d
    ```
 
 3. Create `%APPDATA%\.config\Fidalgo\config.json` so `Fidalgo.Ingest`, `Fidalgo.Agent`, and `Fidalgo.Host` can run cleanly without repeated CLI flags:
