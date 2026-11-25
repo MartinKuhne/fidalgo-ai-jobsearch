@@ -1,0 +1,39 @@
+services:
+  md-to-pdf:
+    image: spawnia/md-to-pdf:latest
+    container_name: fidalgo-md-to-pdf
+    ports:
+      - "${MD_TO_PDF_PORT:-8000}:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  url-to-markdown:
+    image: ghcr.io/nanodeck/url-to-markdown:latest
+    container_name: fidalgo-url-to-markdown
+    profiles:
+      - scrape
+    ports:
+      - "${URL_TO_MARKDOWN_PORT:-3333}:3333"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "3333"
+      APP_KEY: "${URL_TO_MARKDOWN_APP_KEY:-fidalgo-local-dev}"
+    restart: unless-stopped
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: fidalgo-searxng
+    profiles:
+      - scrape
+    ports:
+      - "${SEARXNG_PORT:-8090}:8080"
+    environment:
+      SEARXNG_SECRET: "${SEARXNG_SECRET:-fidalgo-local-dev-secret}"
+    volumes:
+      - ./docker/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    restart: unless-stopped

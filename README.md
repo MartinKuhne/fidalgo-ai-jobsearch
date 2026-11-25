@@ -133,9 +133,13 @@ Options:
    dotnet user-secrets set Adzuna:AppKey <your-app-key>
    ```
 
-2. Start the `spawnia/md-to-pdf` PDF rendering container (used by both `Fidalgo.Agent` and `Fidalgo.Host` for `resume.pdf` and `cover-letter.pdf` generation):
+2. Start the supporting Docker services via Docker Compose (starts `spawnia/md-to-pdf` on port `8000` by default; pass `--profile scrape` to also start `url-to-markdown` on `3333` and `searxng` on `8090` for `Fidalgo.Ingest --Scrape`):
    ```bash
-   docker run -d --name fidalgo-md-to-pdf -p 8000:8000 spawnia/md-to-pdf
+   # PDF rendering service (required for resume.pdf and cover-letter.pdf generation)
+   docker compose up -d
+
+   # Optional: also start url-to-markdown + searxng for LLM web-scraping mode
+   docker compose --profile scrape up -d
    ```
 
 3. Create `%APPDATA%\.config\Fidalgo\config.json` so `Fidalgo.Ingest`, `Fidalgo.Agent`, and `Fidalgo.Host` can run cleanly without repeated CLI flags:
