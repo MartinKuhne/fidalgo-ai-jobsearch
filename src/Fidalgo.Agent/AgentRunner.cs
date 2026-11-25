@@ -261,10 +261,11 @@ public class AgentRunner
         UserProfileLoadOverrides overrides,
         CancellationToken cancellationToken)
     {
-        var allowedTiers = ParseRecommendationFilter(options.RecommendationFilter, _packetOptions.Value.RecommendationFilter);
+        var allowedTiers = CloseFitSelector.ParseTiers(options.RecommendationFilter, _packetOptions.Value.RecommendationFilter);
+        var minScore = options.MinScore ?? 0;
         var allJobs = await _repository.QueryAsync(options.Email, excludeDeleted: true, cancellationToken: cancellationToken);
         var matchingJobs = allJobs
-            .Where(j => !j.IsDeleted && allowedTiers.Contains(j.Recommendation?.Trim() ?? string.Empty))
+            .Where(j => CloseFitSelector.IsCloseFit(j, allowedTiers, minScore))
             .ToList();
 
         var request = BuildPacketRequest(options, overrides);
@@ -345,25 +346,5 @@ public class AgentRunner
             ProfileOverrides: overrides,
             ForceRegenerate: effectiveForce,
             SkipExisting: options.SkipExisting ?? true);
-    }
-
-    private static HashSet<string> ParseRecommendationFilter(string? cliFilter, string? configFilter)
-    {
-        var raw = !string.IsNullOrWhiteSpace(cliFilter) ? cliFilter : configFilter;
-        if (string.IsNullOrWhiteSpace(raw))
-        {
-            raw = "Apply";
-        }
-
-        var tiers = raw
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        if (tiers.Count == 0)
-        {
-            tiers.Add("Apply");
-        }
-
-        return tiers;
     }
 }

@@ -36,9 +36,19 @@ services:
     environment:
       <<: *fidalgo-common-env
       ASPNETCORE_URLS: http://+:8080
+      Adzuna__AppId: "${ADZUNA_APP_ID:-}"
+      Adzuna__AppKey: "${ADZUNA_APP_KEY:-}"
+      ExternalTools__SearxngEndpoint: http://searxng:8080
+      ExternalTools__MarkdownFetchEndpoint: http://url-to-markdown:3333
       ApplicationPacket__ProfileDirectory: /data/profile
       ApplicationPacket__OutputDirectory: /data/applications
       ApplicationPacket__MdToPdfEndpoint: http://md-to-pdf:8000
+      Pipeline__Enabled: "${PIPELINE_ENABLED:-true}"
+      Pipeline__IntervalHours: "${PIPELINE_INTERVAL_HOURS:-4}"
+      Pipeline__RunOnStartup: "${PIPELINE_RUN_ON_STARTUP:-true}"
+      Pipeline__MinScore: "${PIPELINE_MIN_SCORE:-70}"
+      Pipeline__RecommendationFilter: "${PIPELINE_RECOMMENDATION_FILTER:-Apply}"
+      Pipeline__GeneratePackets: "${PIPELINE_GENERATE_PACKETS:-true}"
     volumes:
       - "${FIDALGO_CONFIG_DIR:-./data/config}:/data/config:ro"
       - "${FIDALGO_PROFILE_DIR:-./data/profile}:/data/profile:ro"

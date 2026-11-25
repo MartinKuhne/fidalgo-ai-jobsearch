@@ -199,6 +199,7 @@ public partial class Program
         writer.WriteLine("  --SkipExisting <bool>           Skip complete existing packets (default: true)");
         writer.WriteLine("  --OutputDir <path>              Override output base directory for generated packets");
         writer.WriteLine("  --RecommendationFilter <tiers>  Comma-separated recommendation tiers (default: Apply)");
+        writer.WriteLine("  --MinScore <0-100>              Minimum match score for packet generation (default: 0)");
         writer.WriteLine("  --QueryJobs                     Query mode: List saved jobs");
         writer.WriteLine("  --EmployerFilter <name>         Query mode: Filter jobs by employer");
         writer.WriteLine("  --DateFrom <date>               Query mode: Filter jobs from this date");

@@ -127,6 +127,10 @@ Fidalgo JobSearch AI is a .NET 10 job-search and application-preparation suite. 
 - **Decision:** Name per-job packet folders `<sanitized-employer>_<sanitized-title>_<short-id>` keyed by the first 8 hex chars of `JobEntity.InternalId`.
 - **Rationale:** Avoids title/employer collisions, enables atomic `.tmp-<guid>` staging and zero-DB-migration idempotency, and guards against Windows invalid characters, reserved device names (`CON`, `NUL`, etc.), and path traversal.
 
+### 6.4 Continuous 4-Hour Pipeline & Docker Compose Hosting
+- **Decision:** Extract reusable `AdzunaJobIngestionService`, `LlmJobEvaluationService`, `CloseFitSelector`, and `JobPipelineRunner` into `Fidalgo.Shared.Pipeline`, hosted inside `Fidalgo.Host` via `JobPipelineBackgroundService` (`PeriodicTimer` defaulting to `4` hours) alongside `GET /api/pipeline/status`, and enabled by default in `docker-compose.yml` (`Pipeline__Enabled=true`, `Pipeline__MinScore=70`).
+- **Rationale:** Running ingestion → evaluation → close-fit packet generation sequentially in a single `BackgroundService` eliminates timing gaps between separate timers while keeping `Fidalgo.Ingest` and `Fidalgo.Agent` CLIs available for manual batch runs. Container mounts (`/data/config`, `/data/profile`, `/data/applications`, `/data/db`, `/data/logs`) and `.env` secrets keep all runtime artifacts off container layers.
+
 ## 7. Security Considerations
 
 - **Path Traversal & File Allowlist:** `ApplicationPacketPaths.ResolveJobDirectory` enforces `Path.TrimEndingDirectorySeparator` root containment; `GET /api/jobs/{id}/packet/files/{fileName}` enforces a strict 5-file allowlist.

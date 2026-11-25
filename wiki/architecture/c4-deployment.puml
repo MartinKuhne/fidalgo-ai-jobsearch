@@ -14,6 +14,7 @@ Deployment_Node(host_machine, "Host Workstation / Docker Compose Stack (.env + V
 
     Deployment_Node(host_proc, "fidalgo-host Container / .NET 10 Web Process") {
         component [ASP.NET Core Minimal API\n+ React SPA (wwwroot)] as web_server
+        component [JobPipelineBackgroundService\n(4-hour PeriodicTimer)] as pipeline_bg
         component [ApplicationPacketService\n+ GlobalExceptionHandler] as host_packet_svc
     }
 
@@ -43,6 +44,9 @@ Deployment_Node(ext_sources, "External Job Sources") {
 
 ' === Connections ===
 Rel(web_server, host_packet_svc, "in-process DI")
+Rel(pipeline_bg, host_packet_svc, "generates close-fit packets\n(Score >= MinScore)")
+Rel(pipeline_bg, job_boards, "4-hour Adzuna scan")
+Rel(pipeline_bg, llm_api, "evaluates untriaged jobs")
 Rel(host_packet_svc, appdata_state, "EF Core SQLite +\nSerilog JSON logs")
 Rel(host_packet_svc, config_file, "reads defaults")
 Rel(host_packet_svc, user_docs, "reads profile .md;\nwrites packets")

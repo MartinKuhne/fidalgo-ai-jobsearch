@@ -10,6 +10,7 @@ using Fidalgo.Shared.ErrorHandling;
 using Fidalgo.Shared.Llm;
 using Fidalgo.Shared.Logging;
 using Fidalgo.Shared.Models;
+using Fidalgo.Shared.Pipeline;
 using Fidalgo.Shared.Storage;
 using Fidalgo.Shared.UserProfile;
 using Microsoft.AspNetCore.Mvc;
@@ -92,6 +93,9 @@ builder.Services.AddScoped<ITenantService, TenantService>();
 
 builder.Services.AddFidalgoLlmClient(builder.Configuration);
 builder.Services.AddApplicationPacketServices(builder.Configuration);
+builder.Services.AddFidalgoPipeline(builder.Configuration);
+builder.Services.AddSingleton<PipelineStatusTracker>();
+builder.Services.AddHostedService<JobPipelineBackgroundService>();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
@@ -183,6 +187,12 @@ app.MapGet("/api/tenants", async (ITenantService tenantService, CancellationToke
 {
     var tenants = await tenantService.GetTenantEmailsAsync(cancellationToken);
     return Results.Ok(tenants);
+});
+
+// Continuous pipeline status API
+app.MapGet("/api/pipeline/status", (PipelineStatusTracker statusTracker) =>
+{
+    return Results.Ok(statusTracker.GetSnapshot());
 });
 
 // Profile defaults API

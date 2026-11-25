@@ -64,4 +64,9 @@ public record CliOptions
     /// Nullable so omitted CLI flags fall back to <c>ApplicationPacket:RecommendationFilter</c>.
     /// </summary>
     public string? RecommendationFilter { get; set; }
+
+    /// <summary>
+    /// Optional minimum match score (0-100) required when generating application packets.
+    /// </summary>
+    public int? MinScore { get; set; }
 }

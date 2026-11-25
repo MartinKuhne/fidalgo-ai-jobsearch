@@ -138,10 +138,14 @@ Options:
    ```bash
    cp .env.example .env
 
-   # Build and start the web UI + API (http://localhost:5299) and md-to-pdf (port 8000)
+   # Build and start the web UI + API (http://localhost:5299), md-to-pdf (port 8000),
+   # and the continuous 4-hour scan -> evaluate -> close-fit packet pipeline
    docker compose up -d --build
 
-   # Run batch ingestion and evaluation/packet generation against the mounted folders
+   # Inspect continuous pipeline status
+   curl http://localhost:5299/api/pipeline/status
+
+   # Optional: trigger manual one-shot ingestion or packet runs against the mounted folders
    docker compose run --rm fidalgo-ingest
    docker compose run --rm fidalgo-agent
    docker compose run --rm fidalgo-agent --GeneratePackets
